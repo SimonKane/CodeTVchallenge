@@ -1,0 +1,54 @@
+@import "./variables.css";
+@import "./typography.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--color-black);
+  color: var(--color-white);
+  font-family: var(--font-body);
+  scroll-behavior: auto;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: var(--color-black);
+}
+
+body,
+button,
+a {
+  cursor: default;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+main {
+  position: relative;
+}
+
+::selection {
+  color: var(--color-black);
+  background: var(--color-white);
+}

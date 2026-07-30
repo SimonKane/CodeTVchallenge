@@ -1,0 +1,15 @@
+:root {
+  --color-black: #030507;
+  --color-deep-blue: #071018;
+  --color-storm-blue: #102432;
+  --color-mist: #d7e0e5;
+  --color-white: #f7f8f6;
+  --color-accent: #d8a85c;
+
+  --font-display: "Georgia", "Times New Roman", serif;
+  --font-body: "Arial", sans-serif;
+
+  --page-padding: clamp(1.25rem, 4vw, 4rem);
+
+  --ease-cinematic: cubic-bezier(0.22, 1, 0.36, 1);
+}

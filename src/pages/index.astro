@@ -1,25 +1,27 @@
 ---
-import '../styles/global.css';
-import Hero from '../components/Hero/Hero.astro';
-import Boxes from '../components/Boxes/Boxes.astro';
-import MotionPath from '../components/MotionPath/MotionPath.astro';
-import Physics from '../components/Physics/Physics.astro';
-import ScrollPin from '../components/ScrollPin/ScrollPin.astro';
+import Experience from "../components/Experience/Experience.astro";
+import "../styles/globals.css";
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro + GSAP</title>
-	</head>
-	<body>
-		<Hero />
-		<Boxes />
-		<MotionPath />
-		<Physics />
-		<ScrollPin />
-	</body>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1"
+    />
+
+    <meta
+      name="description"
+      content="Våga se. En interaktiv upplevelse inspirerad av Paraplys arbete för barns trygghet."
+    />
+
+    <title>Våga se * * Paraply</title>
+  </head>
+
+  <body>
+    <main>
+      <Experience />
+    </main>
+  </body>
 </html>
