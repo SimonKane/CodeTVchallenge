@@ -12,6 +12,26 @@ interface ExperienceInstance {
 
 const instances = new Map<HTMLElement, ExperienceInstance>();
 
+const resetScrollOnReload = () => {
+  const navigation = performance.getEntriesByType(
+    "navigation",
+  )[0] as PerformanceNavigationTiming | undefined;
+  if (navigation?.type !== "reload") return;
+
+  history.scrollRestoration = "manual";
+  const root = document.documentElement;
+  const previousBehavior = root.style.scrollBehavior;
+  root.style.scrollBehavior = "auto";
+  scrollTo(0, 0);
+  requestAnimationFrame(() => {
+    scrollTo(0, 0);
+    root.style.scrollBehavior = previousBehavior;
+  });
+};
+
+resetScrollOnReload();
+addEventListener("load", resetScrollOnReload, { once: true });
+
 const findFallback = (root: HTMLElement) => {
   const candidate = root.nextElementSibling;
   return candidate instanceof HTMLElement &&
@@ -30,6 +50,7 @@ const findChapter = (root: HTMLElement) => {
 
 const activateFallback = (root: HTMLElement, staticMode = false) => {
   const fallback = findFallback(root);
+  root.dataset.sceneStatus = "fallback";
   root.hidden = true;
   if (!fallback) return;
   fallback.hidden = false;
@@ -69,6 +90,9 @@ const initializeExperience = async (root: HTMLElement) => {
   const titleFirst = root.querySelector<HTMLElement>("[data-title-first]");
   const titleSecond = root.querySelector<HTMLElement>("[data-title-second]");
   const chapter = findChapter(root);
+  const transitionFlash = chapter?.querySelector<HTMLElement>(
+    "[data-transition-flash]",
+  );
   const chapterCopy = chapter?.querySelector<HTMLElement>("[data-chapter-copy]");
   const chapterEyebrow = chapter?.querySelector<HTMLElement>(
     "[data-chapter-eyebrow]",
@@ -84,6 +108,7 @@ const initializeExperience = async (root: HTMLElement) => {
   if (
     !canvas ||
     !copy ||
+    !transitionFlash ||
     !eyebrow ||
     !titleFirst ||
     !titleSecond ||
@@ -117,6 +142,7 @@ const initializeExperience = async (root: HTMLElement) => {
       {
         root,
         copy,
+        transitionFlash,
         eyebrow,
         titleFirst,
         titleSecond,

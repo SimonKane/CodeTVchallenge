@@ -96,19 +96,19 @@ export const createWaterTextReveal = ({
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   const mobile = matchMedia("(max-width: 720px)").matches;
-  const pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 1.5);
+  const pixelRatio = Math.min(devicePixelRatio, mobile ? 1.5 : 2);
   const definitions = [
-    { element: eyebrow, start: 0.85, end: 0.91, strength: 0.74 },
+    { element: eyebrow, start: 0, end: 0.22, strength: 0.74 },
     ...headingLines.map((element, index) => ({
       element,
-      start: 0.875 + index * 0.015,
-      end: 0.955 + index * 0.015,
+      start: 0.12 + index * 0.045,
+      end: 0.58 + index * 0.045,
       strength: mobile ? 0.72 : 1,
     })),
     ...bodyLines.map((element, index) => ({
       element,
-      start: 0.91 + index * 0.015,
-      end: 0.97 + index * 0.01,
+      start: 0.48 + index * 0.055,
+      end: 0.88 + index * 0.04,
       strength: mobile ? 0.42 : 0.56,
     })),
   ];
@@ -143,10 +143,10 @@ export const createWaterTextReveal = ({
   const drawWater = (progress: number, time = performance.now() * 0.001) => {
     if (!context) return;
     context.clearRect(0, 0, width, height);
-    if (progress < 0.82 || progress >= 0.995) return;
+    if (progress < 0 || progress >= 0.98) return;
     const containerBounds = container.getBoundingClientRect();
-    const rainIn = smooth((progress - 0.82) / 0.035);
-    const rainOut = 1 - smooth((progress - 0.974) / 0.021);
+    const rainIn = smooth(progress / 0.1);
+    const rainOut = 1 - smooth((progress - 0.82) / 0.16);
     const rainIntensity = rainIn * rainOut;
     const screenDropCount = mobile ? 42 : 86;
 
@@ -225,13 +225,13 @@ export const createWaterTextReveal = ({
   const animateRain = (time: number) => {
     animationFrame = undefined;
     drawWater(currentProgress, time * 0.001);
-    if (currentProgress >= 0.82 && currentProgress < 0.995) {
+    if (currentProgress > 0 && currentProgress < 0.98) {
       animationFrame = requestAnimationFrame(animateRain);
     }
   };
 
   const syncRainLoop = () => {
-    const active = currentProgress >= 0.82 && currentProgress < 0.995;
+    const active = currentProgress > 0 && currentProgress < 0.98;
     if (active && animationFrame === undefined) {
       animationFrame = requestAnimationFrame(animateRain);
     } else if (!active) {

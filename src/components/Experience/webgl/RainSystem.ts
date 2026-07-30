@@ -21,6 +21,7 @@ const vertexShader = `
   varying float vWarmth;
   varying vec2 vFlow;
   varying float vStretch;
+  varying float vPointSize;
   uniform vec2 uPointer;
   uniform float uLightning;
   uniform float uIntensity;
@@ -38,7 +39,9 @@ const vertexShader = `
 
     float nearFactor=1.-smoothstep(1.1,15.,-mv.z);
     float travelEnergy=uTravel*(.5+.5*aLayer);
-    gl_PointSize=clamp(aSize*(560./max(.2,-mv.z))*(1.+travelEnergy*1.85+uRush*.32),2.1,78.);
+    float pointSize=clamp(aSize*(560./max(.2,-mv.z))*(1.+travelEnergy*1.85+uRush*.28),2.1,66.);
+    gl_PointSize=pointSize;
+    vPointSize=pointSize;
 
     vFlow=vec2(0.,-1.);
     vStretch=clamp(.5+aLayer*.16+nearFactor*(.2+uTravel*.18),.48,.96);
@@ -54,6 +57,7 @@ const fragmentShader = `
   varying float vWarmth;
   varying vec2 vFlow;
   varying float vStretch;
+  varying float vPointSize;
   void main() {
     vec2 p=gl_PointCoord-.5;
     vec2 tangent=normalize(vFlow);
@@ -61,12 +65,13 @@ const fragmentShader = `
     float across=dot(p,normal);
     float along=dot(p,tangent);
     float width=mix(.07,.022,vStretch);
-    float core=smoothstep(width,0.,abs(across));
-    float softEdge=smoothstep(width*2.7,width*.25,abs(across))*.22;
+    float aa=max(.006,1.35/max(vPointSize,1.));
+    float core=1.-smoothstep(max(0.,width-aa),width+aa,abs(across));
+    float softEdge=(1.-smoothstep(width*.72,width*2.7+aa,abs(across)))*.18;
     float tail=smoothstep(.53,-.5,along);
     float head=smoothstep(.51,.2,along);
     float alpha=(core+softEdge)*tail*head*vAlpha;
-    if(alpha<.012) discard;
+    if(alpha<.006) discard;
     vec3 color=mix(vec3(.68,.82,.92),vec3(.98,.57,.29),vWarmth);
     gl_FragColor=vec4(color,alpha);
   }
@@ -81,6 +86,8 @@ export class RainSystem {
   private cameraZ = 6;
   private scrollShift = 0;
   private rush = 0;
+  private intensity = 0.82;
+  private visibility = 1;
 
   constructor(count: number, warmCenter: number) {
     const geometry = new BufferGeometry();
@@ -132,12 +139,15 @@ export class RainSystem {
     this.scrollShift += progressDelta * 18;
     this.rush = Math.min(1.4, this.rush + Math.abs(progressDelta) * 42);
     this.progress = progress;
-    const travel = 1 - this.range(0.54, 0.72, progress);
-    const wipe = this.range(0.84, 1, progress);
-    this.material.uniforms.uTravel.value =
-      (0.38 + travel * 0.62) * (1 - wipe * 0.42);
-    this.material.uniforms.uIntensity.value =
-      (1.02 + this.range(0.06, 0.58, progress) * 0.58) * (1 - wipe * 0.66);
+    const travel = 1 - this.range(0.26, 0.38, progress);
+    this.material.uniforms.uTravel.value = 0.38 + travel * 0.62;
+    this.intensity = 1.02 + this.range(0.06, 0.58, progress) * 0.58;
+    this.material.uniforms.uIntensity.value = this.intensity * this.visibility;
+  }
+
+  setVisibility(value: number) {
+    this.visibility = Math.min(1, Math.max(0, value));
+    this.material.uniforms.uIntensity.value = this.intensity * this.visibility;
   }
 
   setLightning(value: number) {
@@ -159,7 +169,7 @@ export class RainSystem {
   update(delta: number, elapsed: number, cameraZ: number) {
     const cameraDelta = this.cameraZ - cameraZ;
     this.cameraZ = cameraZ;
-    const travel = 1 - this.range(0.54, 0.72, this.progress);
+    const travel = 1 - this.range(0.26, 0.38, this.progress);
     const wind = Math.sin(elapsed * 0.34) * 0.2 + 0.24;
 
     for (let i = 0; i < this.speeds.length; i += 1) {
