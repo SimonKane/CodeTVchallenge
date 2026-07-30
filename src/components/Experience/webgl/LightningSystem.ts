@@ -1,7 +1,6 @@
 import type {
   AmbientLight,
   DirectionalLight,
-  MeshBasicMaterial,
   PointLight,
   WebGLRenderer,
 } from "three";
@@ -16,7 +15,6 @@ interface LightningTargets {
   directional: DirectionalLight;
   lamp: PointLight;
   warmLight: PointLight;
-  childMaterials: MeshBasicMaterial[];
   fog: FogSystem;
   rain: RainSystem;
   road: WetRoad;
@@ -36,20 +34,12 @@ export class LightningSystem {
       directional,
       lamp,
       warmLight,
-      childMaterials,
     } = this.targets;
     renderer.toneMappingExposure = 0.76 + this.value * 0.82;
     ambient.intensity = 0.09 + this.value * 0.72;
     directional.intensity = 0.18 + this.value * 3.7;
     lamp.intensity = 8 + this.value * 16;
     warmLight.intensity = warmth * 4.5;
-    childMaterials.forEach((material, index) =>
-      material.color.setRGB(
-        0.72 + index * 0.16 + this.value * 0.32 + warmth * 0.1,
-        0.76 + index * 0.16 + this.value * 0.32 + warmth * 0.025,
-        0.8 + index * 0.16 + this.value * 0.32 - warmth * 0.035,
-      ),
-    );
     this.targets.fog.setLightning(this.value);
     this.targets.rain.setLightning(this.value);
     this.targets.road.setLightning(this.value);

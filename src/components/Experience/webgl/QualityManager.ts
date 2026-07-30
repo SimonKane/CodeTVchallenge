@@ -31,7 +31,7 @@ export const getQualityPreset = (): QualityPreset => {
     mobile,
     lowPower,
     pixelRatio: Math.min(devicePixelRatio || 1, mobile || lowPower ? 1.25 : 1.7),
-    rainCount: mobile ? 620 : lowPower ? 820 : 1250,
+    rainCount: mobile ? 950 : lowPower ? 1450 : 2400,
     wordParticles: mobile ? 820 : 1440,
     fogLayers: mobile ? 3 : 5,
     postProcessing: !lowPower && !mobile,

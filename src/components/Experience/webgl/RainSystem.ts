@@ -7,44 +7,68 @@ import {
   Vector2,
 } from "three";
 
+const NEAR_DEPTH = 0.34;
+const FAR_DEPTH = 18;
+const HALF_WIDTH = 9;
+const BOTTOM = -5.6;
+const TOP = 7;
+
 const vertexShader = `
   attribute float aSize;
   attribute float aAlpha;
+  attribute float aLayer;
   varying float vAlpha;
   varying float vWarmth;
+  varying vec2 vFlow;
+  varying float vStretch;
   uniform vec2 uPointer;
   uniform float uLightning;
   uniform float uIntensity;
   uniform float uWarmth;
   uniform float uWarmCenter;
   uniform float uFaceClear;
+  uniform float uTravel;
+  uniform float uRush;
   void main() {
-    vec3 p = position;
-    float d = distance(p.xy * .24, uPointer);
-    p.x += (p.x * .24 - uPointer.x) * smoothstep(.7, 0., d) * .16;
-    vec4 mv = modelViewMatrix * vec4(p, 1.);
-    gl_Position = projectionMatrix * mv;
-    gl_PointSize = clamp(aSize * (280. / -mv.z), 1.2, 19.);
-    vAlpha = aAlpha * uIntensity * (.72 + uLightning * 2.2);
-    float faceMask=smoothstep(.95,.12,distance(p.xy,vec2(uWarmCenter,.62)));
-    vAlpha*=1.-faceMask*uFaceClear*.78;
-    vWarmth = uWarmth * smoothstep(2.8, .2, abs(p.x-uWarmCenter)) *
-      smoothstep(3.2, .1, abs(p.y+.2));
+    vec3 p=position;
+    float pointerDistance=distance(p.xy*.22,uPointer);
+    p.x+=(p.x*.22-uPointer.x)*smoothstep(.75,0.,pointerDistance)*.11;
+    vec4 mv=modelViewMatrix*vec4(p,1.);
+    gl_Position=projectionMatrix*mv;
+
+    float nearFactor=1.-smoothstep(1.1,15.,-mv.z);
+    float travelEnergy=uTravel*(.5+.5*aLayer);
+    gl_PointSize=clamp(aSize*(560./max(.2,-mv.z))*(1.+travelEnergy*1.85+uRush*.32),2.1,78.);
+
+    vFlow=vec2(0.,-1.);
+    vStretch=clamp(.5+aLayer*.16+nearFactor*(.2+uTravel*.18),.48,.96);
+    vAlpha=aAlpha*uIntensity*(.76+nearFactor*.48+uLightning*1.65+uRush*.16);
+    float faceMask=smoothstep(1.18,.18,distance(p.xy,vec2(uWarmCenter,.62)));
+    vAlpha*=1.-faceMask*uFaceClear*.9;
+    vWarmth=uWarmth*smoothstep(3.,.15,abs(p.x-uWarmCenter))*smoothstep(3.2,.1,abs(p.y+.2));
   }
 `;
 
 const fragmentShader = `
   varying float vAlpha;
   varying float vWarmth;
+  varying vec2 vFlow;
+  varying float vStretch;
   void main() {
-    vec2 p = gl_PointCoord - .5;
-    float core = smoothstep(.12, .0, abs(p.x));
-    float tail = smoothstep(.52, -.42, p.y);
-    float head = smoothstep(.52, .16, p.y);
-    float alpha = core * tail * head * vAlpha;
-    if (alpha < .015) discard;
-    vec3 color=mix(vec3(.68,.86,1.),vec3(1.,.62,.3),vWarmth);
-    gl_FragColor = vec4(color, alpha);
+    vec2 p=gl_PointCoord-.5;
+    vec2 tangent=normalize(vFlow);
+    vec2 normal=vec2(-tangent.y,tangent.x);
+    float across=dot(p,normal);
+    float along=dot(p,tangent);
+    float width=mix(.07,.022,vStretch);
+    float core=smoothstep(width,0.,abs(across));
+    float softEdge=smoothstep(width*2.7,width*.25,abs(across))*.22;
+    float tail=smoothstep(.53,-.5,along);
+    float head=smoothstep(.51,.2,along);
+    float alpha=(core+softEdge)*tail*head*vAlpha;
+    if(alpha<.012) discard;
+    vec3 color=mix(vec3(.68,.82,.92),vec3(.98,.57,.29),vWarmth);
+    gl_FragColor=vec4(color,alpha);
   }
 `;
 
@@ -54,7 +78,9 @@ export class RainSystem {
   private readonly speeds: Float32Array;
   private readonly material: ShaderMaterial;
   private progress = 0;
-  private time = 0;
+  private cameraZ = 6;
+  private scrollShift = 0;
+  private rush = 0;
 
   constructor(count: number, warmCenter: number) {
     const geometry = new BufferGeometry();
@@ -62,29 +88,34 @@ export class RainSystem {
     this.speeds = new Float32Array(count);
     const sizes = new Float32Array(count);
     const alphas = new Float32Array(count);
+    const layers = new Float32Array(count);
 
     for (let i = 0; i < count; i += 1) {
-      const zone = i % 3;
+      const layer = (i % 5) / 4;
       const offset = i * 3;
-      this.positions[offset] = (Math.random() - 0.5) * 15;
-      this.positions[offset + 1] = Math.random() * 11 - 4;
-      this.positions[offset + 2] = 3.8 - Math.random() * 12;
-      this.speeds[i] = 2.4 + zone * 1.85 + Math.random() * 2.2;
-      sizes[i] = 0.07 + zone * 0.04 + Math.random() * 0.06;
-      alphas[i] = 0.22 + zone * 0.16 + Math.random() * 0.24;
+      this.positions[offset] = (Math.random() - 0.5) * HALF_WIDTH * 2;
+      this.positions[offset + 1] = BOTTOM + Math.random() * (TOP - BOTTOM);
+      this.positions[offset + 2] = this.cameraZ - NEAR_DEPTH - Math.random() * FAR_DEPTH;
+      this.speeds[i] = 2.7 + layer * 4.2 + Math.random() * 2.4;
+      sizes[i] = 0.055 + layer * 0.085 + Math.random() * 0.055;
+      alphas[i] = 0.2 + layer * 0.25 + Math.random() * 0.22;
+      layers[i] = layer;
     }
 
     geometry.setAttribute("position", new BufferAttribute(this.positions, 3));
     geometry.setAttribute("aSize", new BufferAttribute(sizes, 1));
     geometry.setAttribute("aAlpha", new BufferAttribute(alphas, 1));
+    geometry.setAttribute("aLayer", new BufferAttribute(layers, 1));
     this.material = new ShaderMaterial({
       uniforms: {
         uPointer: { value: new Vector2(20, 20) },
         uLightning: { value: 0 },
-        uIntensity: { value: 0.85 },
+        uIntensity: { value: 0.82 },
         uWarmth: { value: 0 },
         uWarmCenter: { value: warmCenter },
         uFaceClear: { value: 0 },
+        uTravel: { value: 0 },
+        uRush: { value: 0 },
       },
       vertexShader,
       fragmentShader,
@@ -97,8 +128,16 @@ export class RainSystem {
   }
 
   setProgress(progress: number) {
+    const progressDelta = Math.max(-0.045, Math.min(0.045, progress - this.progress));
+    this.scrollShift += progressDelta * 18;
+    this.rush = Math.min(1.4, this.rush + Math.abs(progressDelta) * 42);
     this.progress = progress;
-    this.material.uniforms.uIntensity.value = 0.82 + progress * 0.38;
+    const travel = 1 - this.range(0.54, 0.72, progress);
+    const wipe = this.range(0.84, 1, progress);
+    this.material.uniforms.uTravel.value =
+      (0.38 + travel * 0.62) * (1 - wipe * 0.42);
+    this.material.uniforms.uIntensity.value =
+      (1.02 + this.range(0.06, 0.58, progress) * 0.58) * (1 - wipe * 0.66);
   }
 
   setLightning(value: number) {
@@ -117,23 +156,44 @@ export class RainSystem {
     this.material.uniforms.uPointer.value.copy(pointer);
   }
 
-  update(delta: number, elapsed: number) {
-    this.time += delta;
-    const wind = Math.sin(elapsed * 0.38) * 0.32 + 0.18 + this.progress * 0.12;
+  update(delta: number, elapsed: number, cameraZ: number) {
+    const cameraDelta = this.cameraZ - cameraZ;
+    this.cameraZ = cameraZ;
+    const travel = 1 - this.range(0.54, 0.72, this.progress);
+    const wind = Math.sin(elapsed * 0.34) * 0.2 + 0.24;
+
     for (let i = 0; i < this.speeds.length; i += 1) {
       const offset = i * 3;
-      const zBoost = 1 + Math.max(0, this.positions[offset + 2]) * 0.045;
-      this.positions[offset + 1] -=
-        this.speeds[i] * delta * zBoost * (1 + this.progress * 0.32);
-      this.positions[offset] += wind * delta * zBoost;
-      if (this.positions[offset + 1] < -4.2) {
-        this.positions[offset + 1] = 6.4 + Math.random() * 2;
-        this.positions[offset] = (Math.random() - 0.5) * 15;
+      const depth = cameraZ - this.positions[offset + 2];
+      const near = 1 - Math.min(1, Math.max(0, (depth - NEAR_DEPTH) / FAR_DEPTH));
+      this.positions[offset + 1] -= this.speeds[i] * delta * (0.82 + near * 0.62);
+      this.positions[offset] += wind * delta * (0.7 + near * 0.45);
+      this.positions[offset + 2] +=
+        delta * (1.5 + this.speeds[i] * 0.18) * travel + this.scrollShift;
+
+      if (
+        this.positions[offset + 2] > cameraZ - NEAR_DEPTH ||
+        this.positions[offset + 2] < cameraZ - FAR_DEPTH - Math.abs(cameraDelta) * 2
+      ) {
+        this.positions[offset + 2] = cameraZ - FAR_DEPTH + Math.random() * 4;
+        this.positions[offset] = (Math.random() - 0.5) * HALF_WIDTH * 2;
+        this.positions[offset + 1] = BOTTOM + Math.random() * (TOP - BOTTOM);
       }
-      if (this.positions[offset] > 8) this.positions[offset] = -8;
+      if (this.positions[offset + 1] < BOTTOM) {
+        this.positions[offset + 1] = TOP;
+        this.positions[offset] = (Math.random() - 0.5) * HALF_WIDTH * 2;
+      }
+      if (this.positions[offset] > HALF_WIDTH) this.positions[offset] = -HALF_WIDTH;
     }
-    (this.points.geometry.getAttribute("position") as BufferAttribute).needsUpdate =
-      true;
+    this.scrollShift = 0;
+    this.rush *= Math.exp(-delta * 7.5);
+    this.material.uniforms.uRush.value = this.rush;
+    (this.points.geometry.getAttribute("position") as BufferAttribute).needsUpdate = true;
+  }
+
+  private range(start: number, end: number, value: number) {
+    const t = Math.min(1, Math.max(0, (value - start) / (end - start)));
+    return t * t * (3 - 2 * t);
   }
 
   dispose() {

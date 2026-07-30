@@ -69,6 +69,7 @@ const initializeExperience = async (root: HTMLElement) => {
   const titleFirst = root.querySelector<HTMLElement>("[data-title-first]");
   const titleSecond = root.querySelector<HTMLElement>("[data-title-second]");
   const chapter = findChapter(root);
+  const chapterCopy = chapter?.querySelector<HTMLElement>("[data-chapter-copy]");
   const chapterEyebrow = chapter?.querySelector<HTMLElement>(
     "[data-chapter-eyebrow]",
   );
@@ -76,6 +77,10 @@ const initializeExperience = async (root: HTMLElement) => {
     ? [...chapter.querySelectorAll<HTMLElement>("[data-chapter-line]")]
     : [];
   const chapterBody = chapter?.querySelector<HTMLElement>("[data-chapter-body]");
+  const chapterBodyLines = chapter
+    ? [...chapter.querySelectorAll<HTMLElement>("[data-chapter-body-line]")]
+    : [];
+  const chapterChild = chapter?.querySelector<HTMLElement>("[data-chapter-child]");
   if (
     !canvas ||
     !copy ||
@@ -83,9 +88,12 @@ const initializeExperience = async (root: HTMLElement) => {
     !titleFirst ||
     !titleSecond ||
     !chapter ||
+    !chapterCopy ||
     !chapterEyebrow ||
     chapterLines.length === 0 ||
-    !chapterBody
+    !chapterBody ||
+    chapterBodyLines.length === 0 ||
+    !chapterChild
   ) {
     activateFallback(root);
     return;
@@ -113,9 +121,12 @@ const initializeExperience = async (root: HTMLElement) => {
         titleFirst,
         titleSecond,
         chapter,
+        chapterCopy,
         chapterEyebrow,
         chapterLines,
         chapterBody,
+        chapterBodyLines,
+        chapterChild,
       },
       scene,
     );

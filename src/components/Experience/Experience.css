@@ -102,6 +102,7 @@
 
 .experience-chapter {
   --chapter-warmth: 0;
+  --chapter-cover: 1;
   position: relative;
   z-index: 1;
   display: grid;
@@ -109,8 +110,20 @@
   align-items: center;
   padding: clamp(6rem, 13vh, 10rem) var(--page-padding);
   overflow: hidden;
-  background: #03070a;
+  background: #0c0908;
   color: var(--color-white);
+}
+
+.experience-chapter--enhanced {
+  margin-top: -100svh;
+}
+
+.experience-chapter--composition {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  margin: 0;
+  background: rgba(12, 9, 8, var(--chapter-cover));
 }
 
 .experience-chapter::before {
@@ -124,11 +137,217 @@
   pointer-events: none;
 }
 
+.experience-chapter--composition::before {
+  opacity: var(--chapter-cover);
+}
+
+.experience-chapter-child {
+  position: absolute;
+  z-index: 1;
+  bottom: -5%;
+  left: clamp(2rem, 8vw, 9rem);
+  width: clamp(16rem, 26vw, 30rem);
+  height: min(82svh, 48rem);
+  overflow: hidden;
+  pointer-events: none;
+  will-change: clip-path, opacity;
+}
+
+.experience-chapter-child::after {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent 55%, #0c0908 100%),
+    linear-gradient(0deg, #0c0908 0%, transparent 28%);
+  content: "";
+}
+
+.experience-chapter-child img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center bottom;
+  filter: brightness(0.59) saturate(0.65) contrast(1.08)
+    drop-shadow(0 1.2rem 2.8rem rgba(0, 0, 0, 0.52));
+}
+
 .experience-chapter-copy {
   position: relative;
   z-index: 1;
-  width: min(100%, 67rem);
-  margin-inline: auto;
+  width: min(50vw, 47rem);
+  margin-right: clamp(1rem, 6vw, 7rem);
+  margin-left: auto;
+}
+
+.experience-water-canvas {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.rain-text-reveal {
+  overflow: visible;
+}
+
+.rain-word {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.rain-letter {
+  --rain-trail-height: 0px;
+  --rain-trail-opacity: 0;
+  --rain-drop-opacity: 0;
+  position: relative;
+  display: inline-block;
+  transform-origin: 50% 100%;
+  will-change: transform, opacity, filter;
+}
+
+.rain-letter::before {
+  position: absolute;
+  bottom: calc(100% - 0.08em);
+  left: 50%;
+  width: 1px;
+  height: var(--rain-trail-height);
+  transform: translateX(-50%);
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(188, 217, 229, 0.16) 58%,
+    rgba(235, 246, 249, 0.68)
+  );
+  opacity: var(--rain-trail-opacity);
+  content: "";
+  pointer-events: none;
+}
+
+.rain-letter::after {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  width: 2px;
+  height: 0.52em;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: linear-gradient(
+    to bottom,
+    rgba(220, 239, 246, 0.22),
+    rgba(239, 249, 251, 0.94)
+  );
+  box-shadow:
+    0 0 0.28em rgba(191, 222, 234, 0.46),
+    0 0.32em 0.68em rgba(178, 211, 225, 0.22);
+  opacity: var(--rain-drop-opacity);
+  content: "";
+  pointer-events: none;
+}
+
+.rain-letter--space::before {
+  display: none;
+}
+
+.rain-letter--space::after {
+  display: none;
+}
+
+.rain-text-reveal--complete .rain-letter {
+  opacity: 1 !important;
+  transform: none !important;
+  filter: none !important;
+  text-shadow: none !important;
+  will-change: auto;
+}
+
+.rain-text-reveal--complete .rain-letter::before {
+  opacity: 0;
+}
+
+.rain-text-reveal--complete .rain-letter::after {
+  opacity: 0;
+}
+
+.water-text-reveal {
+  --water-reveal: -10%;
+  -webkit-mask-image:
+    radial-gradient(
+      circle at 9% calc(var(--water-reveal) + 7%),
+      #000 0 3px,
+      transparent 4px
+    ),
+    radial-gradient(
+      circle at 27% calc(var(--water-reveal) + 3%),
+      #000 0 5px,
+      transparent 6px
+    ),
+    radial-gradient(
+      circle at 48% calc(var(--water-reveal) + 9%),
+      #000 0 3px,
+      transparent 4px
+    ),
+    radial-gradient(
+      circle at 71% calc(var(--water-reveal) + 5%),
+      #000 0 4px,
+      transparent 5px
+    ),
+    radial-gradient(
+      circle at 91% calc(var(--water-reveal) + 10%),
+      #000 0 3px,
+      transparent 4px
+    ),
+    linear-gradient(
+      to bottom,
+      #000 0,
+      #000 calc(var(--water-reveal) - 7%),
+      rgba(0, 0, 0, 0.88) calc(var(--water-reveal) - 2%),
+      rgba(0, 0, 0, 0.3) calc(var(--water-reveal) + 3%),
+      transparent calc(var(--water-reveal) + 8%)
+    );
+  mask-image:
+    radial-gradient(
+      circle at 9% calc(var(--water-reveal) + 7%),
+      #000 0 3px,
+      transparent 4px
+    ),
+    radial-gradient(
+      circle at 27% calc(var(--water-reveal) + 3%),
+      #000 0 5px,
+      transparent 6px
+    ),
+    radial-gradient(
+      circle at 48% calc(var(--water-reveal) + 9%),
+      #000 0 3px,
+      transparent 4px
+    ),
+    radial-gradient(
+      circle at 71% calc(var(--water-reveal) + 5%),
+      #000 0 4px,
+      transparent 5px
+    ),
+    radial-gradient(
+      circle at 91% calc(var(--water-reveal) + 10%),
+      #000 0 3px,
+      transparent 4px
+    ),
+    linear-gradient(
+      to bottom,
+      #000 0,
+      #000 calc(var(--water-reveal) - 7%),
+      rgba(0, 0, 0, 0.88) calc(var(--water-reveal) - 2%),
+      rgba(0, 0, 0, 0.3) calc(var(--water-reveal) + 3%),
+      transparent calc(var(--water-reveal) + 8%)
+    );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  will-change: mask-image, -webkit-mask-image;
+}
+
+.water-text-reveal--complete {
+  -webkit-mask-image: none;
+  mask-image: none;
+  will-change: auto;
 }
 
 .experience-chapter-eyebrow {
@@ -149,7 +368,7 @@
 
 .experience-chapter-line-mask {
   display: block;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .experience-chapter-line-mask > span {
@@ -160,11 +379,14 @@
 .experience-chapter-body {
   max-width: 42rem;
   margin-top: clamp(2rem, 5vh, 4rem);
-  margin-left: clamp(0rem, 17vw, 16rem);
+  margin-left: clamp(0rem, 7vw, 7rem);
   font-size: clamp(1.05rem, 1.45vw, 1.35rem);
   line-height: 1.65;
   color: rgba(247, 248, 246, 0.68);
-  will-change: clip-path, transform;
+}
+
+.experience-chapter-body > span {
+  display: block;
 }
 
 @media (max-width: 720px) {
@@ -191,11 +413,95 @@
     padding-top: clamp(7rem, 16svh, 10rem);
   }
 
+  .experience-chapter-child {
+    bottom: -1rem;
+    left: -13vw;
+    width: 62vw;
+    height: 58svh;
+    opacity: 0.7;
+  }
+
+  .experience-chapter-child::after {
+    background:
+      linear-gradient(90deg, transparent 52%, #0c0908 98%),
+      linear-gradient(0deg, #0c0908 0%, transparent 38%);
+  }
+
+  .experience-chapter-copy {
+    width: 100%;
+  }
+
   .experience-chapter h2 {
     font-size: clamp(3.3rem, 16vw, 5.6rem);
   }
 
   .experience-chapter-body {
     margin-left: 0;
+    max-width: 31rem;
+  }
+
+  .water-text-reveal {
+    -webkit-mask-image:
+      radial-gradient(
+        circle at 22% calc(var(--water-reveal) + 5%),
+        #000 0 3px,
+        transparent 4px
+      ),
+      radial-gradient(
+        circle at 72% calc(var(--water-reveal) + 8%),
+        #000 0 3px,
+        transparent 4px
+      ),
+      linear-gradient(
+        to bottom,
+        #000 0,
+        #000 calc(var(--water-reveal) - 5%),
+        rgba(0, 0, 0, 0.72) var(--water-reveal),
+        transparent calc(var(--water-reveal) + 7%)
+      );
+    mask-image:
+      radial-gradient(
+        circle at 22% calc(var(--water-reveal) + 5%),
+        #000 0 3px,
+        transparent 4px
+      ),
+      radial-gradient(
+        circle at 72% calc(var(--water-reveal) + 8%),
+        #000 0 3px,
+        transparent 4px
+      ),
+      linear-gradient(
+        to bottom,
+        #000 0,
+        #000 calc(var(--water-reveal) - 5%),
+        rgba(0, 0, 0, 0.72) var(--water-reveal),
+        transparent calc(var(--water-reveal) + 7%)
+      );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rain-letter {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+
+  .rain-letter::before {
+    display: none;
+  }
+
+  .rain-letter::after {
+    display: none;
+  }
+
+  .water-text-reveal,
+  .water-text-reveal--complete {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .experience-water-canvas {
+    display: none;
   }
 }

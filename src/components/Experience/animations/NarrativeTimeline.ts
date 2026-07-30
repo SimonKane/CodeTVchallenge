@@ -1,6 +1,7 @@
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type { ExperienceScene } from "../webgl/ExperienceScene";
+import { createWaterTextReveal } from "./WaterTextReveal";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -11,9 +12,12 @@ interface NarrativeElements {
   titleFirst: HTMLElement;
   titleSecond: HTMLElement;
   chapter: HTMLElement;
+  chapterCopy: HTMLElement;
   chapterEyebrow: HTMLElement;
   chapterLines: HTMLElement[];
   chapterBody: HTMLElement;
+  chapterBodyLines: HTMLElement[];
+  chapterChild: HTMLElement;
 }
 
 export interface NarrativeController {
@@ -31,14 +35,22 @@ export const createNarrativeTimeline = (
     titleFirst,
     titleSecond,
     chapter,
+    chapterCopy,
     chapterEyebrow,
     chapterLines,
     chapterBody,
+    chapterBodyLines,
+    chapterChild,
   } = elements;
   const introState = { light: 0, environment: 0, child: 0 };
   const narrative = { progress: 0, lightning: 0.12 };
   let scrollTimeline: gsap.core.Timeline | undefined;
-  let chapterTimeline: gsap.core.Timeline | undefined;
+  const waterReveal = createWaterTextReveal({
+    container: chapter,
+    eyebrow: chapterEyebrow,
+    headingLines: chapterLines,
+    bodyLines: chapterBodyLines,
+  });
 
   const renderIntro = () => {
     scene.setEnvironmentVisibility(introState.environment);
@@ -47,15 +59,19 @@ export const createNarrativeTimeline = (
   };
 
   const createScroll = () => {
+    chapter.classList.add("experience-chapter--enhanced");
     scrollTimeline = gsap.timeline({
       scrollTrigger: {
         trigger: root,
         start: "top top",
-        end: () => `+=${innerHeight * 3.2}`,
+        end: () => `+=${innerHeight * 5.6}`,
         pin: true,
         scrub: 0.65,
         anticipatePin: 1,
         invalidateOnRefresh: true,
+        onLeave: () => chapter.classList.remove("experience-chapter--composition"),
+        onEnterBack: () =>
+          chapter.classList.add("experience-chapter--composition"),
       },
     });
 
@@ -66,7 +82,18 @@ export const createNarrativeTimeline = (
           progress: 1,
           duration: 1,
           ease: "none",
-          onUpdate: () => scene.setProgress(narrative.progress),
+          onUpdate: () => {
+            scene.setProgress(narrative.progress);
+            waterReveal.setProgress(narrative.progress);
+            chapter.style.setProperty(
+              "--chapter-cover",
+              String(Math.max(0, (narrative.progress - 0.84) / 0.16)),
+            );
+            chapter.classList.toggle(
+              "experience-chapter--composition",
+              narrative.progress >= 0.84 && narrative.progress < 0.999,
+            );
+          },
         },
         0,
       )
@@ -78,7 +105,7 @@ export const createNarrativeTimeline = (
           duration: 0.01,
           onUpdate: () => scene.setLightning(narrative.lightning),
         },
-        0.94,
+        0.925,
       )
       .to(
         narrative,
@@ -88,59 +115,33 @@ export const createNarrativeTimeline = (
           ease: "power2.out",
           onUpdate: () => scene.setLightning(narrative.lightning),
         },
-        0.95,
-      );
-
-    chapterTimeline = gsap.timeline({
-      scrollTrigger: {
-        trigger: chapter,
-        start: "top 90%",
-        toggleActions: "play none none reverse",
-      },
-    });
-    chapterTimeline
+        0.935,
+      )
       .to(
         chapter,
         {
           "--chapter-warmth": 1,
-          duration: 1.25,
+          duration: 0.16,
           ease: "power2.inOut",
         },
-        0,
+        0.84,
       )
       .to(
-        chapterEyebrow,
-        { opacity: 1, y: 0, duration: 0.55, ease: "power2.out" },
-        0.18,
-      )
-      .to(
-        chapterLines,
+        chapterChild,
         {
-          yPercent: 0,
-          duration: 0.95,
-          stagger: 0.12,
-          ease: "power3.out",
-        },
-        0.28,
-      )
-      .to(
-        chapterBody,
-        {
+          opacity: 1,
           clipPath: "inset(0% 0% 0% 0%)",
-          y: 0,
-          duration: 0.85,
-          ease: "power3.out",
+          duration: 0.055,
+          ease: "power2.out",
         },
-        0.68,
+        0.945,
       );
   };
 
   gsap.set([eyebrow, titleFirst, titleSecond], { opacity: 0, y: 12 });
-  gsap.set(chapterEyebrow, { opacity: 0, y: 16 });
-  gsap.set(chapterLines, { yPercent: 112 });
-  gsap.set(chapterBody, {
-    clipPath: "inset(100% 0% 0% 0%)",
-    y: 28,
+  gsap.set(chapterChild, {
+    opacity: 0,
+    clipPath: "inset(0% 100% 0% 0%)",
   });
   renderIntro();
 
@@ -184,8 +185,10 @@ export const createNarrativeTimeline = (
       intro.kill();
       scrollTimeline?.scrollTrigger?.kill();
       scrollTimeline?.kill();
-      chapterTimeline?.scrollTrigger?.kill();
-      chapterTimeline?.kill();
+      chapter.classList.remove("experience-chapter--composition");
+      chapter.classList.remove("experience-chapter--enhanced");
+      chapter.style.removeProperty("--chapter-cover");
+      waterReveal.destroy();
       gsap.killTweensOf([
         introState,
         narrative,
@@ -197,6 +200,7 @@ export const createNarrativeTimeline = (
         chapterEyebrow,
         chapterLines,
         chapterBody,
+        chapterChild,
       ]);
     },
   };

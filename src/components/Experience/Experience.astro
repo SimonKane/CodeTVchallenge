@@ -1,6 +1,6 @@
 ---
 import Hero from "../Hero/Hero.astro";
-import childImage from "../Hero/assets/child.png";
+import childImage from "./assets/child.png";
 import streetImage from "../Hero/assets/street.png";
 import childLookbackImage from "./assets/child-lookback.png";
 import depthImage from "./assets/street-depth.png";
@@ -50,19 +50,39 @@ import "./Experience.css";
   data-experience-chapter
   aria-labelledby="experience-chapter-title"
 >
+  <div class="experience-chapter-child" data-chapter-child aria-hidden="true">
+    <img src={childLookbackImage.src} alt="" />
+  </div>
   <div class="experience-chapter-copy" data-chapter-copy>
-    <p class="experience-chapter-eyebrow" data-chapter-eyebrow>PARAPLY</p>
-    <h2 id="experience-chapter-title">
+    <p
+      class="experience-chapter-eyebrow"
+      data-chapter-eyebrow
+      aria-label="PARAPLY"
+    >
+      PARAPLY
+    </p>
+    <h2 id="experience-chapter-title" aria-label="Alla sår syns inte.">
       <span class="experience-chapter-line-mask">
-        <span data-chapter-line>Alla sår</span>
+        <span data-chapter-line aria-hidden="true">Alla sår</span>
       </span>
       <span class="experience-chapter-line-mask">
-        <span data-chapter-line>syns inte.</span>
+        <span data-chapter-line aria-hidden="true">syns inte.</span>
       </span>
     </h2>
-    <p class="experience-chapter-body" data-chapter-body>
-      Paraply arbetar för en tryggare värld fri från sexuella övergrepp mot
-      barn. Genom kunskap, stöd och modet att agera kan fler barn bli sedda.
+    <p
+      class="experience-chapter-body"
+      data-chapter-body
+      aria-label="Paraply arbetar för en tryggare värld fri från sexuella övergrepp mot barn. Genom kunskap, stöd och modet att agera kan fler barn bli sedda."
+    >
+      <span data-chapter-body-line aria-hidden="true"
+        >Paraply arbetar för en tryggare värld fri från</span
+      >
+      <span data-chapter-body-line aria-hidden="true"
+        >sexuella övergrepp mot barn. Genom kunskap, stöd</span
+      >
+      <span data-chapter-body-line aria-hidden="true"
+        >och modet att agera kan fler barn bli sedda.</span
+      >
     </p>
   </div>
 </section>

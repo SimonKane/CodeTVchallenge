@@ -13,9 +13,15 @@ import {
   PointLight,
   Scene,
   ShaderMaterial,
+  SphereGeometry,
   Texture,
   Vector2,
+  Vector3,
   WebGLRenderer,
+  BoxGeometry,
+  LineBasicMaterial,
+  Line,
+  BufferGeometry,
 } from "three";
 import type { QualityPreset } from "./QualityManager";
 import { loadExperienceAssets, type ExperienceAssets } from "./AssetLoader";
@@ -60,6 +66,7 @@ const environmentFragment = `
   uniform float uLightning;
   uniform float uProgress;
   uniform float uClose;
+  uniform float uEditorial;
   uniform float uTextureAspect;
   uniform float uViewportAspect;
   varying vec2 vUv;
@@ -78,8 +85,109 @@ const environmentFragment = `
     color+=vec3(.08,.17,.24)*depth*(.08+uProgress*.08);
     float edge=smoothstep(.34,.78,length(vUv-.5)*1.5);
     color*=1.-edge*uClose*.46;
+    float streak=sin((vUv.x*1.35+vUv.y)*52.+depth*14.)*.5+.5;
+    float editorialMask=smoothstep(.08,.92,uEditorial+streak*.14-vUv.y*.08);
+    vec3 editorial=vec3(.035,.026,.023)+vec3(.018,.01,.006)*(1.-vUv.y);
+    color=mix(color,editorial,editorialMask*uEditorial);
     gl_FragColor=vec4(color,uVisibility);
   }`;
+
+const childVertex = `
+  uniform vec2 uUvScale;
+  uniform vec2 uUvOffset;
+  varying vec2 vUv;
+  varying vec3 vWorld;
+  void main(){
+    vUv=(uv-.5)*uUvScale+.5+uUvOffset;
+    vec4 world=modelMatrix*vec4(position,1.);
+    vWorld=world.xyz;
+    gl_Position=projectionMatrix*viewMatrix*world;
+  }`;
+
+const childFragment = `
+  uniform sampler2D uMap;
+  uniform float uOpacity;
+  uniform float uMaskProgress;
+  uniform float uIncoming;
+  uniform float uBrightness;
+  uniform float uLight;
+  uniform float uDebug;
+  uniform vec3 uTint;
+  uniform vec2 uMaskAnchor;
+  varying vec2 vUv;
+  varying vec3 vWorld;
+  float noise(vec2 p){
+    return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);
+  }
+  void main(){
+    vec4 tex=texture2D(uMap,vUv);
+    if(tex.a<.018) discard;
+    float radius=distance(vWorld.xy,uMaskAnchor);
+    float grain=(noise(floor(vWorld.xy*34.))-.5)*.2;
+    float threshold=uMaskProgress*3.25-.38;
+    float reveal=smoothstep(radius-.16+grain,radius+.16+grain,threshold);
+    float mask=mix(1.-reveal,reveal,uIncoming);
+    if(uDebug>.5) mask=.5;
+    float rim=smoothstep(.34,.02,abs(radius-threshold))*(1.-uDebug);
+    vec3 color=tex.rgb*uTint*(uBrightness+uLight*.36)+vec3(.18,.31,.4)*rim*.08;
+    float cropFeather=mix(1.,smoothstep(0.,.15,vUv.y)*smoothstep(0.,.055,1.-vUv.y),uIncoming);
+    gl_FragColor=vec4(color,tex.a*uOpacity*mask*cropFeather);
+  }`;
+
+interface ChildLayout {
+  position: [number, number, number];
+  size: [number, number];
+  rotation: number;
+  uvScale: [number, number];
+  uvOffset: [number, number];
+  brightness: number;
+  tint: [number, number, number];
+}
+
+const CHILD_LAYOUT = {
+  desktop: {
+    standing: {
+      position: [2, -0.86, -0.15],
+      size: [2, 3.53],
+      rotation: 0,
+      uvScale: [1, 1],
+      uvOffset: [0, 0],
+      brightness: 0.82,
+      tint: [0.76, 0.81, 0.86],
+    },
+    lookback: {
+      position: [1.88, 0.46, -0.14],
+      size: [2.17, 1.45],
+      rotation: -0.008,
+      uvScale: [1, 1],
+      uvOffset: [0, 0],
+      brightness: 0.82,
+      tint: [0.76, 0.81, 0.86],
+    },
+    anchor: [1.92, 0.74] as [number, number],
+  },
+  mobile: {
+    standing: {
+      position: [0.72, -1.03, -0.15],
+      size: [1.8, 3.19],
+      rotation: 0,
+      uvScale: [1, 1],
+      uvOffset: [0, 0],
+      brightness: 0.84,
+      tint: [0.76, 0.81, 0.86],
+    },
+    lookback: {
+      position: [0.6, 0.25, -0.14],
+      size: [1.91, 1.28],
+      rotation: -0.006,
+      uvScale: [1, 1],
+      uvOffset: [0, 0],
+      brightness: 0.84,
+      tint: [0.76, 0.81, 0.86],
+    },
+    anchor: [0.64, 0.55] as [number, number],
+  },
+} satisfies Record<string, { standing: ChildLayout; lookback: ChildLayout; anchor: [number, number] }>;
 
 const coneFragment = `
   varying vec2 vUv;
@@ -108,8 +216,8 @@ export class ExperienceScene {
   private road?: WetRoad;
   private lightning?: LightningSystem;
   private environment?: Mesh<PlaneGeometry, ShaderMaterial>;
-  private child?: Mesh<PlaneGeometry, MeshBasicMaterial>;
-  private childLookback?: Mesh<PlaneGeometry, MeshBasicMaterial>;
+  private child?: Mesh<PlaneGeometry, ShaderMaterial>;
+  private childLookback?: Mesh<PlaneGeometry, ShaderMaterial>;
   private childReflection?: Mesh<PlaneGeometry, MeshBasicMaterial>;
   private childShadow?: Mesh<PlaneGeometry, MeshBasicMaterial>;
   private lampCone?: Mesh<PlaneGeometry, ShaderMaterial>;
@@ -120,11 +228,24 @@ export class ExperienceScene {
   private progress = 0;
   private environmentVisibility = 0;
   private childVisibility = 0;
+  private debugGroup?: Group;
+  private debugOverlay?: HTMLDivElement;
+  private debugEnabled = false;
   private readonly handlePointer = (event: PointerEvent) => {
     this.pointerTarget.set(
       (event.clientX / innerWidth) * 2 - 1,
       -(event.clientY / innerHeight) * 2 + 1,
     );
+  };
+  private readonly handleDebug = (event: KeyboardEvent) => {
+    if (event.key.toLowerCase() !== "d") return;
+    this.debugEnabled = !this.debugEnabled;
+    if (this.debugGroup) this.debugGroup.visible = this.debugEnabled;
+    if (this.debugOverlay)
+      this.debugOverlay.style.display = this.debugEnabled ? "block" : "none";
+    if (this.child) this.child.material.uniforms.uDebug.value = Number(this.debugEnabled);
+    if (this.childLookback)
+      this.childLookback.material.uniforms.uDebug.value = Number(this.debugEnabled);
   };
 
   constructor(private readonly options: SceneOptions) {
@@ -156,6 +277,43 @@ export class ExperienceScene {
     if (!this.quality.mobile && matchMedia("(pointer: fine)").matches) {
       addEventListener("pointermove", this.handlePointer, { passive: true });
     }
+    if (import.meta.env.DEV) this.createDebugTools();
+  }
+
+  private createChildMaterial(
+    map: Texture,
+    layout: ChildLayout,
+    incoming: boolean,
+    anchor: [number, number],
+  ) {
+    return new ShaderMaterial({
+      uniforms: {
+        uMap: { value: map },
+        uOpacity: { value: 0 },
+        uMaskProgress: { value: 0 },
+        uIncoming: { value: Number(incoming) },
+        uBrightness: { value: layout.brightness },
+        uLight: { value: 0 },
+        uDebug: { value: 0 },
+        uTint: { value: new Color(...layout.tint) },
+        uUvScale: { value: new Vector2(...layout.uvScale) },
+        uUvOffset: { value: new Vector2(...layout.uvOffset) },
+        uMaskAnchor: { value: new Vector2(...anchor) },
+      },
+      vertexShader: childVertex,
+      fragmentShader: childFragment,
+      transparent: true,
+      depthWrite: false,
+    });
+  }
+
+  private applyChildLayout(
+    mesh: Mesh<PlaneGeometry, ShaderMaterial>,
+    layout: ChildLayout,
+  ) {
+    mesh.position.set(...layout.position);
+    mesh.scale.set(layout.size[0], layout.size[1], 1);
+    mesh.rotation.z = layout.rotation;
   }
 
   private createWorld(assets: ExperienceAssets) {
@@ -169,6 +327,7 @@ export class ExperienceScene {
         uLightning: { value: 0 },
         uProgress: { value: 0 },
         uClose: { value: 0 },
+        uEditorial: { value: 0 },
         uTextureAspect: { value: 1.5 },
         uViewportAspect: { value: 1 },
       },
@@ -183,34 +342,35 @@ export class ExperienceScene {
     this.environment.position.z = -4;
     this.sceneGroup.add(this.environment);
 
-    const childMaterial = new MeshBasicMaterial({
-      map: assets.child,
-      transparent: true,
-      alphaTest: 0.02,
-      opacity: 0,
-      color: new Color(0.72, 0.76, 0.8),
-    });
-    this.child = new Mesh(new PlaneGeometry(2.35, 4.15), childMaterial);
-    this.child.position.set(2, -0.55, -0.15);
+    const layout = this.quality.mobile ? CHILD_LAYOUT.mobile : CHILD_LAYOUT.desktop;
+    const childMaterial = this.createChildMaterial(
+      assets.child,
+      layout.standing,
+      false,
+      layout.anchor,
+    );
+    this.child = new Mesh(new PlaneGeometry(1, 1), childMaterial);
+    this.applyChildLayout(this.child, layout.standing);
     this.sceneGroup.add(this.child);
 
-    const lookbackMaterial = new MeshBasicMaterial({
-      map: assets.childLookback,
-      transparent: true,
-      alphaTest: 0.02,
-      opacity: 0,
-      depthWrite: false,
-      color: new Color(0.72, 0.76, 0.8),
-    });
-    this.childLookback = new Mesh(
-      new PlaneGeometry(2.55, 1.7),
-      lookbackMaterial,
+    const lookbackMaterial = this.createChildMaterial(
+      assets.childLookback,
+      layout.lookback,
+      true,
+      layout.anchor,
     );
-    this.childLookback.position.set(1.88, 0.58, -0.14);
+    this.childLookback = new Mesh(new PlaneGeometry(1, 1), lookbackMaterial);
+    this.applyChildLayout(this.childLookback, layout.lookback);
     this.childLookback.renderOrder = 1;
     this.sceneGroup.add(this.childLookback);
 
-    const reflectionMaterial = childMaterial.clone();
+    const reflectionMaterial = new MeshBasicMaterial({
+      map: assets.child,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      color: new Color(0.55, 0.62, 0.67),
+    });
     reflectionMaterial.opacity = 0;
     reflectionMaterial.depthWrite = false;
     this.childReflection = new Mesh(
@@ -283,7 +443,6 @@ export class ExperienceScene {
       directional,
       lamp,
       warmLight,
-      childMaterials: [childMaterial, lookbackMaterial],
       fog: this.fog,
       rain: this.rain,
       road: this.road,
@@ -312,65 +471,95 @@ export class ExperienceScene {
 
   setProgress(value: number) {
     this.progress = Math.min(1, Math.max(0, value));
-    const distance = smooth(0, 0.25, this.progress);
-    const approach = smooth(0.25, 0.6, this.progress);
-    const close = smooth(0.6, 0.78, this.progress);
-    const lookback = smooth(0.78, 0.92, this.progress);
+    const travel = smooth(0, 0.58, this.progress);
+    const arrival = smooth(0.58, 0.72, this.progress);
+    const mask = smooth(0.72, 0.84, this.progress);
+    const editorial = smooth(0.84, 1, this.progress);
     const childX = this.quality.mobile ? 0.72 : 2;
     const startX = this.quality.mobile ? 0.12 : -0.16;
-    const finalX = this.quality.mobile ? 0.46 : 1.28;
-    const finalZ = this.quality.mobile ? 2.82 : 2.34;
-    const travel =
-      distance * 0.18 + approach * 0.5 + close * 0.24 + lookback * 0.08;
+    const closeX = this.quality.mobile ? 0.43 : 1.28;
+    const closeZ = this.quality.mobile ? 2.88 : 2.34;
+    const editorialX = this.quality.mobile ? 0.82 : 2.42;
+    const editorialZ = this.quality.mobile ? 3.35 : 3.62;
+    const drift =
+      Math.sin(this.progress * Math.PI * 3.4) * 0.11 * travel * (1 - arrival);
+    const verticalDrift =
+      Math.sin(this.progress * Math.PI * 2.2) * 0.045 * travel * (1 - arrival);
 
-    this.camera.position.x = startX + (finalX - startX) * travel;
-    this.camera.position.y = close * 0.2 + lookback * 0.04;
-    this.camera.position.z = 6 + (finalZ - 6) * travel;
+    this.camera.position.x =
+      startX + (closeX - startX) * travel + (editorialX - closeX) * editorial + drift;
+    this.camera.position.y =
+      verticalDrift +
+      arrival * (this.quality.mobile ? 0.12 : 0.22) +
+      editorial * 0.08;
+    this.camera.position.z =
+      6 + (closeZ - 6) * travel + (editorialZ - closeZ) * editorial;
     this.camera.fov =
-      (this.quality.mobile ? 55 : 47) - close * (this.quality.mobile ? 3 : 5);
+      (this.quality.mobile ? 55 : 47) -
+      arrival * (this.quality.mobile ? 3 : 5) +
+      editorial * (this.quality.mobile ? 1 : 3);
     this.camera.updateProjectionMatrix();
 
-    const targetBlend = smooth(0.18, 0.72, this.progress);
+    const targetBlend = smooth(0.12, 0.7, this.progress);
     const targetX =
       (this.quality.mobile ? 0.25 : 0) +
-      (childX - 0.06 - (this.quality.mobile ? 0.25 : 0)) * targetBlend;
-    const targetY = -0.15 + 0.52 * targetBlend;
-    const targetZ = -2.3 + 2.15 * targetBlend;
+      (childX - 0.06 - (this.quality.mobile ? 0.25 : 0)) * targetBlend +
+      editorial * (this.quality.mobile ? 0.58 : 1.18);
+    const targetY = -0.15 + 0.52 * targetBlend + editorial * 0.05;
+    const targetZ = -2.3 + 2.15 * targetBlend - editorial * 0.18;
     this.camera.lookAt(targetX, targetY, targetZ);
 
     if (this.environment) {
       this.environment.material.uniforms.uProgress.value = this.progress;
       this.environment.material.uniforms.uDepthStrength.value =
-        0.16 + approach * 0.3 + close * 0.14;
-      this.environment.material.uniforms.uClose.value = close;
+        0.16 + travel * 0.32 + arrival * 0.13;
+      this.environment.material.uniforms.uClose.value = arrival;
+      this.environment.material.uniforms.uEditorial.value = editorial;
     }
     this.rain?.setProgress(this.progress);
-    this.rain?.setFaceClear(close);
+    this.rain?.setFaceClear(arrival);
+    if (this.fog) {
+      this.fog.group.position.z = travel * (this.quality.mobile ? 1.15 : 1.65);
+      this.fog.group.position.x =
+        Math.sin(this.progress * Math.PI * 2.5) * 0.16 * travel;
+    }
     this.road?.setProgress(this.progress);
-    const warmth = smooth(0.62, 0.9, this.progress) * 0.22;
+    const warmth = editorial * 0.12;
     this.road?.setWarmth(warmth);
     this.lightning?.set(this.lightning.intensity, warmth);
 
-    const lookFade = smooth(0.78, 0.92, this.progress);
-    const distantFade = smooth(0.8, 0.92, this.progress);
+    const handoff = smooth(0.96, 1, this.progress);
     if (this.child) {
-      this.child.material.opacity = this.childVisibility * (1 - distantFade);
+      this.child.material.uniforms.uOpacity.value = this.childVisibility * (1 - handoff);
+      this.child.material.uniforms.uMaskProgress.value = mask;
     }
     if (this.childLookback) {
-      const lookbackX = childX - 0.12;
-      const lookbackY = this.quality.mobile ? 0.36 : 0.58;
-      this.childLookback.material.opacity = this.childVisibility * lookFade;
+      this.childLookback.material.uniforms.uOpacity.value =
+        this.childVisibility * (1 - handoff);
+      this.childLookback.material.uniforms.uMaskProgress.value = mask;
+      const lookbackLayout = this.quality.mobile
+        ? CHILD_LAYOUT.mobile.lookback
+        : CHILD_LAYOUT.desktop.lookback;
       this.childLookback.position.set(
-        lookbackX + (1 - lookFade) * 0.025,
-        lookbackY - (1 - lookFade) * 0.02,
-        -0.14,
+        lookbackLayout.position[0] + (1 - mask) * 0.035,
+        lookbackLayout.position[1] - (1 - mask) * 0.025,
+        lookbackLayout.position[2],
       );
     }
+    if (this.debugOverlay && this.debugEnabled)
+      this.debugOverlay.textContent =
+        `DEV · D toggles\nprogress ${this.progress.toFixed(3)}\ncamera ${this.camera.position
+          .toArray()
+          .map((number) => number.toFixed(2))
+          .join(", ")}\nmask ${mask.toFixed(2)}\nchild safe 30–68%`;
   }
 
   setLightning(value: number) {
-    const warmth = smooth(0.62, 0.9, this.progress) * 0.22;
+    const warmth = smooth(0.84, 1, this.progress) * 0.12;
     this.lightning?.set(value, warmth);
+    if (this.child) this.child.material.uniforms.uLight.value = value;
+    if (this.childLookback)
+      this.childLookback.material.uniforms.uLight.value = value;
     if (this.environment)
       this.environment.material.uniforms.uLightning.value = value;
     if (this.lampCone)
@@ -385,11 +574,11 @@ export class ExperienceScene {
 
   setChildVisibility(value: number) {
     this.childVisibility = value;
-    const lookFade = smooth(0.78, 0.92, this.progress);
-    const distantFade = smooth(0.8, 0.92, this.progress);
-    if (this.child) this.child.material.opacity = value * (1 - distantFade);
+    const handoff = smooth(0.96, 1, this.progress);
+    if (this.child)
+      this.child.material.uniforms.uOpacity.value = value * (1 - handoff);
     if (this.childLookback)
-      this.childLookback.material.opacity = value * lookFade;
+      this.childLookback.material.uniforms.uOpacity.value = value * (1 - handoff);
     if (this.childReflection)
       this.childReflection.material.opacity = value * 0.11;
   }
@@ -406,13 +595,11 @@ export class ExperienceScene {
       const visibleHeight = 2 * Math.tan((this.camera.fov * Math.PI) / 360) * distance;
       this.environment.scale.set(visibleHeight * this.camera.aspect, visibleHeight, 1);
       this.environment.material.uniforms.uViewportAspect.value = this.camera.aspect;
+      const layout = this.quality.mobile ? CHILD_LAYOUT.mobile : CHILD_LAYOUT.desktop;
+      if (this.child) this.applyChildLayout(this.child, layout.standing);
+      if (this.childLookback)
+        this.applyChildLayout(this.childLookback, layout.lookback);
       const childX = this.quality.mobile ? 0.72 : 2;
-      this.child?.position.set(childX, this.quality.mobile ? -0.75 : -0.55, -0.15);
-      this.childLookback?.position.set(
-        childX - 0.12,
-        this.quality.mobile ? 0.36 : 0.58,
-        -0.14,
-      );
       this.childReflection?.position.set(
         childX,
         this.quality.mobile ? -3.42 : -3.25,
@@ -425,6 +612,41 @@ export class ExperienceScene {
       );
     }
     this.post?.setSize(width, height);
+  }
+
+  private createDebugTools() {
+    const group = new Group();
+    const pathGeometry = new BufferGeometry().setFromPoints([
+      new Vector3(this.quality.mobile ? 0.12 : -0.16, 0, 6),
+      new Vector3(this.quality.mobile ? 0.43 : 1.28, 0.2, this.quality.mobile ? 2.88 : 2.34),
+      new Vector3(this.quality.mobile ? 0.82 : 2.42, 0.3, this.quality.mobile ? 3.35 : 3.62),
+    ]);
+    group.add(new Line(pathGeometry, new LineBasicMaterial({ color: 0x39ffbf })));
+    const rainBounds = new Mesh(
+      new BoxGeometry(18, 12.6, 18),
+      new MeshBasicMaterial({ color: 0x2a7fff, wireframe: true }),
+    );
+    rainBounds.name = "rain-bounds";
+    rainBounds.position.z = this.camera.position.z - 9;
+    group.add(rainBounds);
+    const layout = this.quality.mobile ? CHILD_LAYOUT.mobile : CHILD_LAYOUT.desktop;
+    const anchor = new Mesh(
+      new SphereGeometry(0.075, 10, 8),
+      new MeshBasicMaterial({ color: 0xff315d }),
+    );
+    anchor.position.set(layout.anchor[0], layout.anchor[1], 0);
+    group.add(anchor);
+    group.visible = false;
+    this.scene.add(group);
+    this.debugGroup = group;
+
+    const overlay = document.createElement("div");
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.style.cssText =
+      "display:none;position:fixed;inset:8% 12%;z-index:99;border:1px solid rgba(57,255,191,.55);padding:8px;color:#8fffd9;background:rgba(0,0,0,.15);font:11px/1.45 monospace;white-space:pre;pointer-events:none";
+    this.canvas.parentElement?.append(overlay);
+    this.debugOverlay = overlay;
+    addEventListener("keydown", this.handleDebug);
   }
 
   start() {
@@ -440,7 +662,9 @@ export class ExperienceScene {
       this.pointer.lerp(this.pointerTarget, 0.045);
       this.rain?.setPointer(this.pointer);
       this.fog?.setPointer(this.pointer);
-      this.rain?.update(delta, this.elapsed);
+      this.rain?.update(delta, this.elapsed, this.camera.position.z);
+      const bounds = this.debugGroup?.getObjectByName("rain-bounds");
+      if (bounds) bounds.position.z = this.camera.position.z - 9;
       this.fog?.update(this.elapsed);
       this.road?.update(this.elapsed);
       if (this.environment) {
@@ -464,6 +688,8 @@ export class ExperienceScene {
   dispose() {
     this.pause();
     removeEventListener("pointermove", this.handlePointer);
+    removeEventListener("keydown", this.handleDebug);
+    this.debugOverlay?.remove();
     this.rain?.dispose();
     this.fog?.dispose();
     this.road?.dispose();
