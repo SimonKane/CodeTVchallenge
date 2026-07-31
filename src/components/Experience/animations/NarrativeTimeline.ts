@@ -7,6 +7,32 @@ import { createWaterTextReveal } from "./WaterTextReveal";
 
 gsap.registerPlugin(ScrollTrigger);
 
+const REVEAL_TRIGGER_TIME = 0.72;
+const BASE_TIMELINE_DURATION = 4.32;
+const POST_REVEAL_SLOWDOWN = 1.15;
+
+const slowPostRevealTime = (time: number) =>
+  REVEAL_TRIGGER_TIME +
+  (time - REVEAL_TRIGGER_TIME) * POST_REVEAL_SLOWDOWN;
+
+const slowPostRevealDuration = (duration: number) =>
+  duration * POST_REVEAL_SLOWDOWN;
+
+const getNarrativeScrollDistance = () => {
+  if (matchMedia("(max-width: 720px)").matches) return 5.6;
+  if (matchMedia("(pointer: coarse)").matches) return 8.8;
+  return 10.8;
+};
+
+const getScrollDistance = (baseDistance: number) => {
+  const revealDistance =
+    baseDistance * (REVEAL_TRIGGER_TIME / BASE_TIMELINE_DURATION);
+  return (
+    revealDistance +
+    (baseDistance - revealDistance) * POST_REVEAL_SLOWDOWN
+  );
+};
+
 interface NarrativeElements {
   root: HTMLElement;
   copy: HTMLElement;
@@ -26,6 +52,141 @@ interface NarrativeElements {
 export interface NarrativeController {
   destroy: () => void;
 }
+
+interface ScrollBounds {
+  start: number;
+  end: number;
+}
+
+const createScrollGovernor = (
+  getBounds: () => ScrollBounds | undefined,
+  getLockedY: () => number | undefined,
+) => {
+  const scrollState = { y: scrollY };
+  let targetY = scrollY;
+  let scrollTween: gsap.core.Tween | undefined;
+
+  const queueScroll = (delta: number) => {
+    const lockedY = getLockedY();
+    if (lockedY !== undefined) {
+      scrollTween?.kill();
+      targetY = lockedY;
+      scrollTo(0, lockedY);
+      return true;
+    }
+
+    const bounds = getBounds();
+    if (!bounds || bounds.end <= bounds.start) return false;
+
+    const currentY = scrollY;
+    const movingForward = delta > 0;
+    if (
+      (movingForward && currentY >= bounds.end - 1) ||
+      (!movingForward && currentY <= bounds.start + 1) ||
+      currentY < bounds.start - 1 ||
+      currentY > bounds.end + 1
+    ) {
+      return false;
+    }
+
+    const viewport = innerHeight;
+    const maxStep = viewport * 1.15;
+    const maxLead = viewport * 1.45;
+    const scaledDelta = Math.sign(delta) * Math.min(Math.abs(delta), maxStep);
+    const queuedFrom = scrollTween?.isActive() ? targetY : currentY;
+    targetY = Math.min(
+      bounds.end,
+      Math.max(
+        bounds.start,
+        Math.min(currentY + maxLead, Math.max(currentY - maxLead, queuedFrom + scaledDelta)),
+      ),
+    );
+
+    scrollTween?.kill();
+    scrollState.y = currentY;
+    const distance = Math.abs(targetY - currentY);
+    scrollTween = gsap.to(scrollState, {
+      y: targetY,
+      duration: 0.18 + (distance / viewport) * 0.18,
+      ease: "power2.out",
+      overwrite: true,
+      onUpdate: () => {
+        const lockedY = getLockedY();
+        if (lockedY !== undefined) {
+          scrollTween?.kill();
+          targetY = lockedY;
+          scrollState.y = lockedY;
+        }
+        scrollTo(0, scrollState.y);
+      },
+    });
+    return true;
+  };
+
+  const handleWheel = (event: WheelEvent) => {
+    if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+    const modeMultiplier =
+      event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? 18
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? innerHeight
+          : 1;
+    if (queueScroll(event.deltaY * modeMultiplier)) event.preventDefault();
+  };
+
+  const handleKeydown = (event: KeyboardEvent) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement ||
+      event.target instanceof HTMLSelectElement ||
+      (event.target instanceof HTMLElement && event.target.isContentEditable)
+    ) {
+      return;
+    }
+
+    const direction = event.shiftKey ? -1 : 1;
+    const distances: Partial<Record<string, number>> = {
+      ArrowDown: innerHeight * 0.14,
+      ArrowUp: -innerHeight * 0.14,
+      PageDown: innerHeight * 0.52,
+      PageUp: -innerHeight * 0.52,
+      " ": innerHeight * 0.52 * direction,
+      End: innerHeight * 0.52,
+      Home: -innerHeight * 0.52,
+    };
+    const delta = distances[event.key];
+    if (delta !== undefined && queueScroll(delta)) event.preventDefault();
+  };
+
+  const handleTouchMove = (event: TouchEvent) => {
+    const lockedY = getLockedY();
+    if (lockedY === undefined) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    scrollTo(0, lockedY);
+  };
+
+  const handleScroll = () => {
+    const lockedY = getLockedY();
+    if (lockedY !== undefined && Math.abs(scrollY - lockedY) > 0.5) {
+      scrollTo(0, lockedY);
+    }
+  };
+
+  addEventListener("wheel", handleWheel, { passive: false });
+  addEventListener("keydown", handleKeydown);
+  addEventListener("touchmove", handleTouchMove, { passive: false });
+  addEventListener("scroll", handleScroll, { passive: true });
+
+  return () => {
+    scrollTween?.kill();
+    removeEventListener("wheel", handleWheel);
+    removeEventListener("keydown", handleKeydown);
+    removeEventListener("touchmove", handleTouchMove);
+    removeEventListener("scroll", handleScroll);
+  };
+};
 
 export const createNarrativeTimeline = (
   elements: NarrativeElements,
@@ -49,15 +210,16 @@ export const createNarrativeTimeline = (
   const introState = { light: 0, environment: 0, child: 0 };
   const narrative = { progress: 0, lightning: 0.12 };
   const editorialState = { progress: 0 };
-  const editorialPlayback = { progress: 0 };
   const umbrellaState = { progress: 0 };
   const textRevealState = { progress: 0 };
   const rainState = { visibility: 1 };
   let scrollTimeline: gsap.core.Timeline | undefined;
   let textRevealTimeline: gsap.core.Timeline | undefined;
-  let editorialCatchupTween: gsap.core.Tween | undefined;
+  let scrollNormalizer: { kill: () => void } | undefined;
+  let destroyScrollGovernor: (() => void) | undefined;
   let textRevealStarted = false;
   let textRevealComplete = false;
+  let sequenceLockY: number | undefined;
   let refreshFrame: number | undefined;
   let chapterState: "held" | "overlay" | "released" | undefined;
   const waterReveal = createWaterTextReveal({
@@ -86,42 +248,34 @@ export const createNarrativeTimeline = (
     ...transitionFlash.querySelectorAll<SVGPathElement>("path"),
   ];
 
-  const renderIntro = () => {
-    scene.setEnvironmentVisibility(introState.environment);
-    scene.setChildVisibility(introState.child);
-    scene.setLightning(introState.light);
+  const unlockSequence = () => {
+    sequenceLockY = undefined;
+    delete chapter.dataset.sequenceLocked;
   };
 
   const resetTextReveal = () => {
     textRevealTimeline?.kill();
     textRevealTimeline = undefined;
-    editorialCatchupTween?.kill();
-    editorialCatchupTween = undefined;
     textRevealStarted = false;
     textRevealComplete = false;
     textRevealState.progress = 0;
-    editorialPlayback.progress = 0;
     rainState.visibility = 1;
     waterReveal.setProgress(0);
-    editorialTransformation.setProgress(0);
     scene.setRainVisibility(1);
+    unlockSequence();
   };
 
-  const playTextReveal = () => {
+  const playTextReveal = (lockY = scrollY) => {
     if (textRevealStarted) return;
     textRevealStarted = true;
+    sequenceLockY = lockY;
+    chapter.dataset.sequenceLocked = "true";
+    scrollTo(0, lockY);
     textRevealTimeline = gsap
       .timeline({
         onComplete: () => {
           textRevealComplete = true;
-          editorialCatchupTween?.kill();
-          editorialCatchupTween = gsap.to(editorialPlayback, {
-            progress: editorialState.progress,
-            duration: 0.65,
-            ease: "power2.inOut",
-            onUpdate: () =>
-              editorialTransformation.setProgress(editorialPlayback.progress),
-          });
+          unlockSequence();
         },
       })
       .to(textRevealState, {
@@ -140,6 +294,12 @@ export const createNarrativeTimeline = (
         },
         2,
       );
+  };
+
+  const renderIntro = () => {
+    scene.setEnvironmentVisibility(introState.environment);
+    scene.setChildVisibility(introState.child);
+    scene.setLightning(introState.light);
   };
 
   const syncChapterState = (progress: number, released = false) => {
@@ -170,12 +330,28 @@ export const createNarrativeTimeline = (
       scrollTrigger: {
         trigger: root,
         start: "top top",
-        end: () => `+=${innerHeight * 12.2}`,
+        end: () =>
+          `+=${innerHeight * getScrollDistance(getNarrativeScrollDistance())}`,
         pin: true,
         pinSpacing: true,
-        scrub: 0.85,
+        scrub: matchMedia("(pointer: coarse)").matches ? 0.95 : 0.78,
         anticipatePin: 1,
         invalidateOnRefresh: true,
+        onUpdate: (trigger) => {
+          const duration = scrollTimeline?.duration() ?? 0;
+          if (!duration) return;
+          const revealThreshold = REVEAL_TRIGGER_TIME / duration;
+          if (trigger.progress >= revealThreshold && !textRevealStarted) {
+            const lockY =
+              trigger.start + (trigger.end - trigger.start) * revealThreshold;
+            playTextReveal(lockY);
+          } else if (
+            trigger.progress < revealThreshold - 0.008 &&
+            textRevealComplete
+          ) {
+            resetTextReveal();
+          }
+        },
         onLeave: () => syncChapterState(1, true),
         onEnterBack: (trigger) =>
           syncChapterState(Math.min(1, trigger.progress * 2)),
@@ -198,11 +374,6 @@ export const createNarrativeTimeline = (
           onUpdate: () => {
             scene.setProgress(narrative.progress);
             syncChapterState(narrative.progress);
-            if (narrative.progress >= 0.72) {
-              playTextReveal();
-            } else if (textRevealStarted) {
-              resetTextReveal();
-            }
           },
         },
         0,
@@ -384,18 +555,15 @@ export const createNarrativeTimeline = (
         editorialState,
         {
           progress: 1,
-          duration: 1.5,
+          duration: slowPostRevealDuration(1.34),
           ease: "none",
           onUpdate: () => {
             if (textRevealComplete) {
-              editorialCatchupTween?.kill();
-              editorialCatchupTween = undefined;
-              editorialPlayback.progress = editorialState.progress;
-              editorialTransformation.setProgress(editorialPlayback.progress);
+              editorialTransformation.setProgress(editorialState.progress);
             }
           },
         },
-        1,
+        slowPostRevealTime(1),
       );
 
     if (umbrellaChapter) {
@@ -404,23 +572,39 @@ export const createNarrativeTimeline = (
           editorialFinalElements,
           {
             opacity: 0,
-            duration: 0.28,
+            duration: slowPostRevealDuration(0.26),
             ease: "power2.inOut",
           },
-          2.5,
+          slowPostRevealTime(2.34),
         )
         .to(
           umbrellaState,
           {
             progress: 1,
-            duration: 2.2,
+            duration: slowPostRevealDuration(1.94),
             ease: "none",
             onUpdate: () =>
               umbrellaTransformation.setProgress(umbrellaState.progress),
           },
-          2.5,
+          slowPostRevealTime(2.38),
         );
     }
+
+    destroyScrollGovernor = createScrollGovernor(
+      () => {
+        const trigger = scrollTimeline?.scrollTrigger;
+        return trigger ? { start: trigger.start, end: trigger.end } : undefined;
+      },
+      () => sequenceLockY,
+    );
+
+    scrollNormalizer = ScrollTrigger.normalizeScroll({
+      type: "touch",
+      allowNestedScroll: true,
+      lockAxis: true,
+      momentum: (observer) =>
+        Math.min(0.55, Math.max(0.18, Math.abs(observer.velocityY) / 3200)),
+    });
 
     refreshFrame = requestAnimationFrame(() => {
       refreshFrame = undefined;
@@ -481,7 +665,9 @@ export const createNarrativeTimeline = (
     destroy: () => {
       intro.kill();
       textRevealTimeline?.kill();
-      editorialCatchupTween?.kill();
+      unlockSequence();
+      scrollNormalizer?.kill();
+      destroyScrollGovernor?.();
       if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame);
       scrollTimeline?.scrollTrigger?.kill();
       scrollTimeline?.kill();
@@ -496,7 +682,6 @@ export const createNarrativeTimeline = (
         introState,
         narrative,
         editorialState,
-        editorialPlayback,
         umbrellaState,
         textRevealState,
         rainState,

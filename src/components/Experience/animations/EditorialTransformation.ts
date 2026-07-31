@@ -39,6 +39,8 @@ const normalize = (value: string) =>
   value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase("sv");
 
 const fract = (value: number) => value - Math.floor(value);
+const clamp = (minimum: number, maximum: number, value: number) =>
+  Math.min(maximum, Math.max(minimum, value));
 
 const hash = (value: number) =>
   fract(Math.sin(value) * 43758.5453123);
@@ -59,22 +61,30 @@ const createLeafFlight = (
 ): LeafFlight => {
   const bounds = measureWithoutInlineTransform(letter);
   const seed = hash((index + 1) * 91.713);
-  const horizontalSeed = hash((index + 1) * 12.9898 + 4.1414);
-  const verticalSeed = hash((index + 1) * 78.233 + 17.1717);
-  const targetX = width * (0.035 + horizontalSeed * 0.93);
-  const targetY = height * (0.055 + verticalSeed * 0.86);
-  const x = targetX - (bounds.left + bounds.width / 2);
-  const y = targetY - (bounds.top + bounds.height / 2);
+  const horizontalSeed = fract(index * 0.61803398875 + seed * 0.11);
+  const verticalSeed = fract(index * 0.75487766625 + seed * 0.13);
+  const targetX = width * (0.045 + horizontalSeed * 0.91);
+  const targetY = height * (0.09 + verticalSeed * 0.82);
+  const sourceX = bounds.left + bounds.width / 2;
+  const sourceY = bounds.top + bounds.height / 2;
+  const x = targetX - sourceX;
+  const y = targetY - sourceY;
   const direction = index % 2 === 0 ? -1 : 1;
   const curl = direction * width * (0.08 + seed * 0.1);
+  const midTargetX = clamp(width * 0.035, width * 0.965, sourceX + x * 0.42 + curl);
+  const midTargetY = clamp(
+    height * 0.075,
+    height * 0.925,
+    sourceY + y * 0.28 - height * (0.045 + seed * 0.075),
+  );
 
   return {
     x,
     y,
     rotation: direction * (115 + seed * 310),
     scale: 0.68 + seed * 0.58,
-    midX: x * 0.42 + curl,
-    midY: y * 0.28 - height * (0.08 + seed * 0.13),
+    midX: midTargetX - sourceX,
+    midY: midTargetY - sourceY,
     midRotation: direction * (55 + seed * 145),
   };
 };

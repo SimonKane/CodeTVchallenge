@@ -88,8 +88,10 @@ export class RainSystem {
   private rush = 0;
   private intensity = 0.82;
   private visibility = 1;
+  private activeCount: number;
 
   constructor(count: number, warmCenter: number) {
+    this.activeCount = count;
     const geometry = new BufferGeometry();
     this.positions = new Float32Array(count * 3);
     this.speeds = new Float32Array(count);
@@ -166,13 +168,21 @@ export class RainSystem {
     this.material.uniforms.uPointer.value.copy(pointer);
   }
 
+  setDensity(ratio: number) {
+    this.activeCount = Math.max(
+      400,
+      Math.min(this.speeds.length, Math.round(this.speeds.length * ratio)),
+    );
+    this.points.geometry.setDrawRange(0, this.activeCount);
+  }
+
   update(delta: number, elapsed: number, cameraZ: number) {
     const cameraDelta = this.cameraZ - cameraZ;
     this.cameraZ = cameraZ;
     const travel = 1 - this.range(0.26, 0.38, this.progress);
     const wind = Math.sin(elapsed * 0.34) * 0.2 + 0.24;
 
-    for (let i = 0; i < this.speeds.length; i += 1) {
+    for (let i = 0; i < this.activeCount; i += 1) {
       const offset = i * 3;
       const depth = cameraZ - this.positions[offset + 2];
       const near = 1 - Math.min(1, Math.max(0, (depth - NEAR_DEPTH) / FAR_DEPTH));

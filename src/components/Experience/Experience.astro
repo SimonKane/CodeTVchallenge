@@ -1,13 +1,13 @@
 ---
 import Hero from "../Hero/Hero.astro";
-import childImage from "./assets/child.png";
-import streetImage from "../Hero/assets/street.png";
-import childLookbackImage from "./assets/child-lookback.png";
-import hushImage from "./assets/schh.png";
+import childImage from "./assets/child.webp";
+import streetImage from "../Hero/assets/street.webp";
+import childLookbackImage from "./assets/child-lookback.webp";
+import hushImage from "./assets/schh.webp";
 import depthImage from "./assets/street-depth.png";
-import closedUmbrellaImage from "./assets/closed-umbrella.png";
-import openUmbrellaImage from "./assets/open-umbrella.png";
-import withoutHoodImage from "./assets/whitout-hood.png";
+import closedUmbrellaImage from "./assets/closed-umbrella.webp";
+import openUmbrellaImage from "./assets/open-umbrella.webp";
+import withoutHoodImage from "./assets/whitout-hood.webp";
 import "./Experience.css";
 
 const hiddenMessage = "tystnad";
@@ -74,14 +74,14 @@ const hiddenMessage = "tystnad";
     </svg>
   </div>
   <div class="experience-chapter-child" data-chapter-child aria-hidden="true">
-    <img src={childLookbackImage.src} alt="" />
+    <img src={childLookbackImage.src} alt="" decoding="async" />
   </div>
   <div
     class="editorial-final-image"
     data-editorial-final-image
     aria-hidden="true"
   >
-    <img src={hushImage.src} alt="" />
+    <img src={hushImage.src} alt="" decoding="async" />
   </div>
   <div
     class="editorial-hidden-message"
@@ -153,18 +153,21 @@ const hiddenMessage = "tystnad";
         data-umbrella-closed
         src={closedUmbrellaImage.src}
         alt=""
+        decoding="async"
       />
       <img
         class="umbrella-chapter__sheltered-child"
         data-umbrella-sheltered-child
         src={withoutHoodImage.src}
         alt=""
+        decoding="async"
       />
       <img
         class="umbrella-chapter__image umbrella-chapter__image--open"
         data-umbrella-open
         src={openUmbrellaImage.src}
         alt=""
+        decoding="async"
       />
       <canvas
         class="umbrella-chapter__canopy-rain"

@@ -209,6 +209,10 @@ export class ExperienceScene {
   readonly camera = new PerspectiveCamera(47, 1, 0.1, 40);
   private elapsed = 0;
   private previousTime = 0;
+  private performanceSampleStart = 0;
+  private performanceSampleDuration = 0;
+  private performanceSampleFrames = 0;
+  private adaptiveQualitySettled = false;
   private readonly pointer = new Vector2();
   private readonly pointerTarget = new Vector2();
   private readonly quality: QualityPreset;
@@ -721,8 +725,29 @@ export class ExperienceScene {
     const tick = (time: number) => {
       if (!this.running) return;
       const seconds = time * 0.001;
-      const delta = Math.min(0.04, this.previousTime ? seconds - this.previousTime : 0);
+      const frameDuration = this.previousTime ? seconds - this.previousTime : 0;
+      const delta = Math.min(0.04, frameDuration);
       this.previousTime = seconds;
+      if (!this.adaptiveQualitySettled && frameDuration > 0 && frameDuration < 0.5) {
+        if (!this.performanceSampleStart) this.performanceSampleStart = seconds;
+        this.performanceSampleDuration += frameDuration;
+        this.performanceSampleFrames += 1;
+        if (seconds - this.performanceSampleStart >= 2) {
+          const averageFrameDuration =
+            this.performanceSampleDuration / this.performanceSampleFrames;
+          if (this.performanceSampleFrames >= 8 && averageFrameDuration > 1 / 42) {
+            this.post?.setEnabled(false);
+            this.rain?.setDensity(0.58);
+            this.fog?.setDensity(3);
+            if (this.quality.pixelRatio > 1.25) {
+              this.renderer.setPixelRatio(1.25);
+              this.resize();
+            }
+            this.canvas.dataset.adaptiveQuality = "reduced";
+          }
+          this.adaptiveQualitySettled = true;
+        }
+      }
       this.elapsed += delta;
       this.pointer.lerp(this.pointerTarget, 0.045);
       this.updateChildParallax();

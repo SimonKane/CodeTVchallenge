@@ -14,6 +14,7 @@ import {
 export class PostProcessing {
   private readonly composer?: EffectComposer;
   private readonly bloom?: BloomEffect;
+  private enabled: boolean;
   private lightning = 0;
   private formationBloom = 0;
 
@@ -23,6 +24,7 @@ export class PostProcessing {
     private readonly camera: Camera,
     enabled: boolean,
   ) {
+    this.enabled = enabled;
     if (!enabled) return;
     this.composer = new EffectComposer(renderer, { multisampling: 0 });
     this.composer.addPass(new RenderPass(scene, camera));
@@ -64,8 +66,11 @@ export class PostProcessing {
     this.composer?.setSize(width, height);
   }
   render(delta: number) {
-    if (this.composer) this.composer.render(delta);
+    if (this.composer && this.enabled) this.composer.render(delta);
     else this.renderer.render(this.scene, this.camera);
+  }
+  setEnabled(enabled: boolean) {
+    this.enabled = enabled && Boolean(this.composer);
   }
   dispose() {
     this.composer?.dispose();

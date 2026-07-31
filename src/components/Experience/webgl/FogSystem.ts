@@ -74,6 +74,12 @@ export class FogSystem {
     );
   }
 
+  setDensity(visibleLayers: number) {
+    this.group.children.forEach((child, index) => {
+      child.visible = index < visibleLayers;
+    });
+  }
+
   dispose() {
     this.group.children.forEach((child) => {
       if (child instanceof Mesh) child.geometry.dispose();

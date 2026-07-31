@@ -16,7 +16,8 @@ export interface CameraApproachController {
 }
 
 const CAMERA_MOTION = {
-  scrollDistanceInViewports: 1.8,
+  desktopScrollDistanceInViewports: 1.8,
+  mobileScrollDistanceInViewports: 1.1,
   backgroundScale: 1.09,
   childScale: 1.035,
   backgroundTravelInViewports: 0.045,
@@ -48,7 +49,12 @@ export const createCameraApproach = ({
         trigger: hero,
         start: "top top",
         end: () =>
-          `+=${window.innerHeight * CAMERA_MOTION.scrollDistanceInViewports}`,
+          `+=${
+            window.innerHeight *
+            (matchMedia("(max-width: 720px)").matches
+              ? CAMERA_MOTION.mobileScrollDistanceInViewports
+              : CAMERA_MOTION.desktopScrollDistanceInViewports)
+          }`,
         pin: true,
         scrub: CAMERA_MOTION.scrubSmoothing,
         anticipatePin: 1,

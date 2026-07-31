@@ -23,6 +23,7 @@ interface RevealTarget {
   start: number;
   end: number;
   strength: number;
+  bounds: { left: number; top: number; width: number; height: number };
 }
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
@@ -115,6 +116,7 @@ export const createWaterTextReveal = ({
   const targets: RevealTarget[] = definitions.map((definition) => ({
     ...definition,
     ...splitIntoRainLetters(definition.element, definition.strength),
+    bounds: { left: 0, top: 0, width: 0, height: 0 },
   }));
   let width = 1;
   let height = 1;
@@ -134,6 +136,15 @@ export const createWaterTextReveal = ({
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
     context?.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    targets.forEach((target) => {
+      const targetBounds = target.element.getBoundingClientRect();
+      target.bounds = {
+        left: targetBounds.left - bounds.left,
+        top: targetBounds.top - bounds.top,
+        width: targetBounds.width,
+        height: targetBounds.height,
+      };
+    });
   };
 
   const resizeObserver = new ResizeObserver(resize);
@@ -144,7 +155,6 @@ export const createWaterTextReveal = ({
     if (!context) return;
     context.clearRect(0, 0, width, height);
     if (progress < 0 || progress >= 0.98) return;
-    const containerBounds = container.getBoundingClientRect();
     const rainIn = smooth(progress / 0.1);
     const rainOut = 1 - smooth((progress - 0.82) / 0.16);
     const rainIntensity = rainIn * rainOut;
@@ -182,9 +192,9 @@ export const createWaterTextReveal = ({
         (progress - target.start) / (target.end - target.start),
       );
       if (groupProgress <= 0 || groupProgress >= 1) return;
-      const bounds = target.element.getBoundingClientRect();
-      const left = bounds.left - containerBounds.left;
-      const top = bounds.top - containerBounds.top;
+      const bounds = target.bounds;
+      const left = bounds.left;
+      const top = bounds.top;
       const dropCount = mobile ? 4 : Math.round(7 + target.strength * 7);
 
       for (let index = 0; index < dropCount; index += 1) {

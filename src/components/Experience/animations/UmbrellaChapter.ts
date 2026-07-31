@@ -274,7 +274,10 @@ export const createUmbrellaChapter = (
     .to({}, { duration: 0.72 });
 
   return {
-    setProgress: (progress) => timeline.progress(clamp(progress)),
+    setProgress: (progress) => {
+      timeline.progress(clamp(progress));
+      rainCanvas.invalidateGeometry();
+    },
     destroy: () => {
       timeline.kill();
       rainCanvas.destroy();

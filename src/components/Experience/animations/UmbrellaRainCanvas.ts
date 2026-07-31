@@ -38,6 +38,7 @@ interface RunoffDrop {
 
 export interface UmbrellaRainCanvasController {
   setVisibility: (visibility: number) => void;
+  invalidateGeometry: () => void;
   destroy: () => void;
 }
 
@@ -61,6 +62,7 @@ export const createUmbrellaRainCanvas = (
   let visibility = 0;
   let animationFrame: number | undefined;
   let previousTime = performance.now();
+  let geometryDirty = true;
 
   const canopy = {
     centerX: width * 0.5,
@@ -78,6 +80,7 @@ export const createUmbrellaRainCanvas = (
       umbrellaBounds.top - canvasBounds.top + umbrellaBounds.height * CANOPY_APEX_RATIO;
     canopy.edgeY =
       umbrellaBounds.top - canvasBounds.top + umbrellaBounds.height * CANOPY_EDGE_RATIO;
+    geometryDirty = false;
   };
 
   const canopySurface = (x: number) => {
@@ -153,7 +156,7 @@ export const createUmbrellaRainCanvas = (
   };
 
   const update = (delta: number) => {
-    syncCanopyGeometry();
+    if (geometryDirty) syncCanopyGeometry();
     rain.forEach((drop) => {
       const previousY = drop.y;
       drop.x += drop.drift * delta;
@@ -286,6 +289,9 @@ export const createUmbrellaRainCanvas = (
       visibility = clamp(value);
       canvas.style.opacity = `${visibility}`;
       syncAnimation();
+    },
+    invalidateGeometry: () => {
+      geometryDirty = true;
     },
     destroy: () => {
       if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
