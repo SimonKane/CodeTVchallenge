@@ -13,7 +13,7 @@ if (street && flash && darkness && copy) {
   });
 
   timeline
-    // Första blixten: gatan syns kort.
+    // First flash: the street briefly becomes visible.
     .to(
       flash,
       {

@@ -48,10 +48,10 @@ export const getQualityPreset = (): QualityPreset => {
   return {
     mobile,
     lowPower,
-    pixelRatio: Math.min(devicePixelRatio || 1, mobile || lowPower ? 1.25 : 1.7),
-    rainCount: mobile ? 950 : lowPower ? 1450 : 2400,
-    wordParticles: mobile ? 820 : 1440,
-    fogLayers: mobile || lowPower ? 3 : 5,
+    pixelRatio: Math.min(devicePixelRatio || 1, mobile ? 1 : lowPower ? 1.25 : 1.7),
+    rainCount: mobile ? 650 : lowPower ? 1450 : 2400,
+    wordParticles: mobile ? 600 : 1440,
+    fogLayers: mobile ? 2 : lowPower ? 3 : 5,
     postProcessing: !lowPower && !mobile,
   };
 };

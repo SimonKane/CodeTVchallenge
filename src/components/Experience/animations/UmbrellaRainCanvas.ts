@@ -52,7 +52,8 @@ export const createUmbrellaRainCanvas = (
   umbrella: HTMLElement,
 ): UmbrellaRainCanvasController => {
   const context = canvas.getContext("2d");
-  const pixelRatio = Math.min(devicePixelRatio, 2);
+  const mobile = matchMedia("(max-width: 800px), (pointer: coarse)").matches;
+  const pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
   const rain: RainDrop[] = [];
   const splashes: SplashDrop[] = [];
   const impactCrowns: ImpactCrown[] = [];
@@ -142,7 +143,7 @@ export const createUmbrellaRainCanvas = (
     context?.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     syncCanopyGeometry();
     rain.length = 0;
-    const count = width < 700 ? 135 : 260;
+    const count = mobile ? 100 : width < 700 ? 135 : 260;
     for (let index = 0; index < count; index += 1) {
       const drop = {} as RainDrop;
       resetRainDrop(drop, true);

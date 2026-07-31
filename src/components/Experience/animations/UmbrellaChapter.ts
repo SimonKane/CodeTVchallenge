@@ -18,7 +18,9 @@ const fract = (value: number) => value - Math.floor(value);
 const hash = (value: number) => fract(Math.sin(value) * 43758.5453123);
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 const BACKGROUND_READY_TIME = 0.6;
-const TEXT_READY_TIME = 2.42;
+// Keep a short readable hold after the last letters land, then let the next
+// scroll reach the lightning/opening instead of crossing an empty interval.
+const TEXT_READY_TIME = 2.66;
 
 const splitIntoRainCharacters = (element: HTMLElement) => {
   const textNodes: Text[] = [];
@@ -130,6 +132,7 @@ export const createUmbrellaChapter = (
     ...problem.querySelectorAll<HTMLElement>("[data-umbrella-rain-text]"),
   ];
   const rainCharacters = rainText.flatMap(splitIntoRainCharacters);
+  const mobile = matchMedia("(max-width: 800px), (pointer: coarse)").matches;
   const safeBlocks = [
     ...safeCopy.querySelectorAll<HTMLElement>("h2, p"),
   ];
@@ -163,7 +166,7 @@ export const createUmbrellaChapter = (
     rotation: (index: number) => (hash(index * 5.29) - 0.5) * 28,
     scaleX: 0.18,
     scaleY: 2.15,
-    filter: "blur(2.2px)",
+    filter: mobile ? "none" : "blur(2.2px)",
     "--umbrella-rain-trail": 0.9,
   });
   gsap.set(safeBlocks, { opacity: 0, y: 22 });
@@ -198,7 +201,7 @@ export const createUmbrellaChapter = (
         rotation: 0,
         scaleX: 1,
         scaleY: 1,
-        filter: "blur(0px)",
+        filter: "none",
         "--umbrella-rain-trail": 0,
         duration: 0.58,
         stagger: { amount: 1.05, from: "random" },
@@ -253,7 +256,7 @@ export const createUmbrellaChapter = (
         rotation: (index: number) => pushVectors[index].rotation,
         scale: 0.55,
         opacity: 0,
-        filter: "blur(1.8px)",
+        filter: mobile ? "none" : "blur(1.8px)",
         duration: 0.54,
         stagger: { amount: 0.12, from: "center" },
         ease: "power3.out",

@@ -84,7 +84,8 @@ export const createLightningCanvas = (
   canvas: HTMLCanvasElement,
 ): LightningCanvasController => {
   const context = canvas.getContext("2d");
-  const pixelRatio = Math.min(devicePixelRatio, 2);
+  const mobile = matchMedia("(max-width: 800px), (pointer: coarse)").matches;
+  const pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
   let width = 1;
   let height = 1;
   let progress = 0;

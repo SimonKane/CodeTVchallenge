@@ -106,8 +106,8 @@ export class ParticleWord {
     context.textBaseline = "middle";
     context.lineWidth = 5;
     context.strokeStyle = "#fff";
-    context.strokeText("HJÄLP", canvas.width / 2, canvas.height / 2 + 5);
-    context.fillText("HJÄLP", canvas.width / 2, canvas.height / 2 + 5);
+    context.strokeText("HELP", canvas.width / 2, canvas.height / 2 + 5);
+    context.fillText("HELP", canvas.width / 2, canvas.height / 2 + 5);
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
     const samples: number[][] = [];
     for (let y = 0; y < canvas.height; y += 3) {

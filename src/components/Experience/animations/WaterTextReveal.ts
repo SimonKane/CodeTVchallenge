@@ -37,6 +37,7 @@ const hash = (value: number) =>
 const splitIntoRainLetters = (
   element: HTMLElement,
   strength: number,
+  mobile: boolean,
 ): { letters: RainLetter[]; originalText: string } => {
   const originalText = element.textContent?.replace(/\s+/g, " ").trim() ?? "";
   const fragment = document.createDocumentFragment();
@@ -67,7 +68,7 @@ const splitIntoRainLetters = (
       letter.textContent = character;
       letter.style.opacity = "0";
       letter.style.transform = `translate3d(0, ${-distance}px, 0) scaleX(.12) scaleY(1.9)`;
-      letter.style.filter = "blur(1.6px)";
+      letter.style.filter = mobile ? "none" : "blur(1.6px)";
       letter.style.setProperty("--rain-trail-opacity", "0");
       letter.style.setProperty("--rain-drop-opacity", "0");
       letter.style.setProperty("--rain-trail-height", `${distance}px`);
@@ -97,7 +98,7 @@ export const createWaterTextReveal = ({
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   const mobile = matchMedia("(max-width: 720px)").matches;
-  const pixelRatio = Math.min(devicePixelRatio, mobile ? 1.5 : 2);
+  const pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
   const definitions = [
     { element: eyebrow, start: 0, end: 0.22, strength: 0.74 },
     ...headingLines.map((element, index) => ({
@@ -115,7 +116,7 @@ export const createWaterTextReveal = ({
   ];
   const targets: RevealTarget[] = definitions.map((definition) => ({
     ...definition,
-    ...splitIntoRainLetters(definition.element, definition.strength),
+    ...splitIntoRainLetters(definition.element, definition.strength, mobile),
     bounds: { left: 0, top: 0, width: 0, height: 0 },
   }));
   let width = 1;
@@ -158,7 +159,7 @@ export const createWaterTextReveal = ({
     const rainIn = smooth(progress / 0.1);
     const rainOut = 1 - smooth((progress - 0.82) / 0.16);
     const rainIntensity = rainIn * rainOut;
-    const screenDropCount = mobile ? 42 : 86;
+    const screenDropCount = mobile ? 28 : 86;
 
     for (let index = 0; index < screenDropCount; index += 1) {
       const xSeed = hash(index * 2.17 + 4.3);
@@ -195,7 +196,7 @@ export const createWaterTextReveal = ({
       const bounds = target.bounds;
       const left = bounds.left;
       const top = bounds.top;
-      const dropCount = mobile ? 4 : Math.round(7 + target.strength * 7);
+      const dropCount = mobile ? 3 : Math.round(7 + target.strength * 7);
 
       for (let index = 0; index < dropCount; index += 1) {
         const seed = hash(index + targetIndex * 8.17);
@@ -275,27 +276,29 @@ export const createWaterTextReveal = ({
         3,
       )}) scaleY(${(1.9 - glyphShape * 0.9).toFixed(3)})`;
       element.style.filter =
-        letterProgress >= 0.88
+        mobile || letterProgress >= 0.88
           ? "none"
           : `blur(${((1 - glyphShape) * 1.35).toFixed(2)}px)`;
       element.style.textShadow =
-        letterProgress >= 0.92
+        mobile || letterProgress >= 0.92
           ? "none"
           : `0 0 ${(2 + (1 - glyphShape) * 7).toFixed(
               1,
             )}px rgba(205,231,240,${(0.12 + dropOpacity * 0.34).toFixed(2)})`;
-      element.style.setProperty(
-        "--rain-trail-opacity",
-        trailOpacity.toFixed(3),
-      );
-      element.style.setProperty(
-        "--rain-drop-opacity",
-        dropOpacity.toFixed(3),
-      );
-      element.style.setProperty(
-        "--rain-trail-height",
-        `${Math.max(5, distance * (1 - settled * 0.72)).toFixed(1)}px`,
-      );
+      if (!mobile) {
+        element.style.setProperty(
+          "--rain-trail-opacity",
+          trailOpacity.toFixed(3),
+        );
+        element.style.setProperty(
+          "--rain-drop-opacity",
+          dropOpacity.toFixed(3),
+        );
+        element.style.setProperty(
+          "--rain-trail-height",
+          `${Math.max(5, distance * (1 - settled * 0.72)).toFixed(1)}px`,
+        );
+      }
     });
     target.element.classList.toggle(
       "rain-text-reveal--complete",

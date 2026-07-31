@@ -90,7 +90,7 @@
 
 .experience-title {
   display: flex;
-  gap: 0.14em;
+  gap: 0.2em;
   margin: 0;
   font-family: var(--font-display);
   font-size: clamp(3.8rem, 7.5vw, 8rem);
@@ -626,7 +626,7 @@
 }
 
 .experience-chapter h2 {
-  max-width: 9.5ch;
+  max-width: 12ch;
   font-family: var(--font-display);
   font-size: clamp(4rem, 8.5vw, 9rem);
   font-weight: 400;
@@ -676,6 +676,44 @@
     display: none;
   }
 
+  .rain-letter {
+    will-change: transform, opacity;
+  }
+
+  .rain-letter::before,
+  .rain-letter::after,
+  .experience-chapter--editorial-ready
+    .rain-text-reveal--complete
+    .rain-letter.editorial-source-letter--washed::before,
+  .experience-chapter--editorial-ready
+    .rain-text-reveal--complete
+    .rain-letter.editorial-source-letter--washed::after {
+    display: none;
+  }
+
+  .experience-chapter--editorial-ready
+    .rain-text-reveal--complete
+    .rain-letter.editorial-source-letter {
+    will-change: transform, opacity;
+  }
+
+  .experience-chapter--editorial-ready
+    .rain-text-reveal--complete
+    .rain-letter.editorial-source-letter--washed {
+    filter: none !important;
+    text-shadow: none !important;
+  }
+
+  .experience-chapter-child img,
+  .editorial-final-image img {
+    filter: none;
+  }
+
+  .editorial-final-image {
+    clip-path: none !important;
+    will-change: transform, opacity;
+  }
+
   .experience-chapter {
     align-items: start;
     padding-top: clamp(7rem, 16svh, 10rem);
@@ -699,7 +737,9 @@
   }
 
   .experience-chapter h2 {
-    font-size: clamp(3.4rem, 15.5vw, 5.5rem);
+    max-width: 10.5ch;
+    font-size: clamp(2.7rem, 12.5vw, 4.6rem);
+    line-height: 0.96;
   }
 
   .experience-chapter-body {
@@ -835,6 +875,20 @@
   background: transparent;
   color: var(--color-white);
   pointer-events: none;
+}
+
+.editorial-washed-canvas {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.experience-chapter--editorial-ready .experience-chapter-copy {
+  z-index: 4;
 }
 
 .experience-chapter--umbrella-active > .experience-chapter-child,
@@ -1119,6 +1173,14 @@
 }
 
 @media (max-width: 800px) {
+  .umbrella-rain-character {
+    will-change: transform, opacity;
+  }
+
+  .umbrella-chapter__shelter-glow {
+    filter: none;
+  }
+
   .umbrella-chapter__image--closed {
     width: 112vw;
     opacity: 0.7;
