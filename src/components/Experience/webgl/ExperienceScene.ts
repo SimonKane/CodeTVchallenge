@@ -221,6 +221,7 @@ export class ExperienceScene {
   private readonly pointerTarget = new Vector2();
   private readonly quality: QualityPreset;
   private readonly canvas: HTMLCanvasElement;
+  private mobileLayout = false;
   private assets?: ExperienceAssets;
   private post?: PostProcessing;
   private rain?: RainSystem;
@@ -486,16 +487,17 @@ export class ExperienceScene {
 
   setProgress(value: number) {
     this.progress = Math.min(1, Math.max(0, value));
+    const mobile = this.mobileLayout;
     const travel = smooth(0, 0.28, this.progress);
     const arrival = smooth(0.28, 0.35, this.progress);
     const mask = smooth(0.315, 0.36, this.progress);
     const editorial = smooth(0.39, 0.72, this.progress);
-    const childX = this.quality.mobile ? 0.72 : 0.86;
-    const startX = this.quality.mobile ? 0.12 : -0.04;
-    const closeX = this.quality.mobile ? 0.43 : 0.54;
-    const closeZ = this.quality.mobile ? 2.88 : 2.34;
-    const editorialX = this.quality.mobile ? 0.82 : 1.44;
-    const editorialZ = this.quality.mobile ? 3.35 : 3.62;
+    const childX = mobile ? 0.72 : 0.86;
+    const startX = mobile ? 0.12 : -0.04;
+    const closeX = mobile ? 0.43 : 0.54;
+    const closeZ = mobile ? 2.88 : 2.34;
+    const editorialX = mobile ? 0.82 : 1.44;
+    const editorialZ = mobile ? 3.35 : 3.62;
     const drift =
       Math.sin(this.progress * Math.PI * 3.4) * 0.11 * travel * (1 - arrival);
     const verticalDrift =
@@ -505,21 +507,21 @@ export class ExperienceScene {
       startX + (closeX - startX) * travel + (editorialX - closeX) * editorial + drift;
     this.camera.position.y =
       verticalDrift +
-      arrival * (this.quality.mobile ? 0.12 : 0.22) +
+      arrival * (mobile ? 0.12 : 0.22) +
       editorial * 0.08;
     this.camera.position.z =
       6 + (closeZ - 6) * travel + (editorialZ - closeZ) * editorial;
     this.camera.fov =
-      (this.quality.mobile ? 55 : 47) -
-      arrival * (this.quality.mobile ? 2 : 1.5) +
-      editorial * (this.quality.mobile ? 1 : 3);
+      (mobile ? 58 : 50) -
+      arrival * (mobile ? 2 : 1.5) +
+      editorial * (mobile ? 1 : 3);
     this.camera.updateProjectionMatrix();
 
     const targetBlend = smooth(0.08, 0.34, this.progress);
     const targetX =
-      (this.quality.mobile ? 0.25 : 0) +
-      (childX - 0.06 - (this.quality.mobile ? 0.25 : 0)) * targetBlend +
-      editorial * (this.quality.mobile ? 0.58 : 1.18);
+      (mobile ? 0.25 : 0) +
+      (childX - 0.06 - (mobile ? 0.25 : 0)) * targetBlend +
+      editorial * (mobile ? 0.58 : 1.18);
     const targetY = -0.42 + 0.24 * targetBlend + editorial * 0.04;
     const targetZ = -2.3 + 2.15 * targetBlend - editorial * 0.18;
     this.camera.lookAt(targetX, targetY, targetZ);
@@ -535,7 +537,7 @@ export class ExperienceScene {
     this.rain?.setProgress(this.progress);
     this.rain?.setFaceClear(arrival);
     if (this.fog) {
-      this.fog.group.position.z = travel * (this.quality.mobile ? 1.15 : 1.65);
+      this.fog.group.position.z = travel * (mobile ? 1.15 : 1.65);
       this.fog.group.position.x =
         Math.sin(this.progress * Math.PI * 2.5) * 0.16 * travel;
     }
@@ -553,10 +555,14 @@ export class ExperienceScene {
       this.childLookback.material.uniforms.uOpacity.value =
         this.childVisibility * (1 - handoff);
       this.childLookback.material.uniforms.uMaskProgress.value = mask;
-      const lookbackLayout = this.quality.mobile
+      const lookbackLayout = mobile
         ? CHILD_LAYOUT.mobile.lookback
         : CHILD_LAYOUT.desktop.lookback;
       this.childLookback.position.set(...lookbackLayout.position);
+    }
+    if (this.childReflection) {
+      this.childReflection.material.opacity =
+        this.childVisibility * 0.11 * (1 - handoff);
     }
     if (this.debugOverlay && this.debugEnabled)
       this.debugOverlay.textContent =
@@ -596,15 +602,16 @@ export class ExperienceScene {
     if (this.childLookback)
       this.childLookback.material.uniforms.uOpacity.value = value * (1 - handoff);
     if (this.childReflection)
-      this.childReflection.material.opacity = value * 0.11;
+      this.childReflection.material.opacity = value * 0.11 * (1 - handoff);
   }
 
   resize() {
     const width = Math.max(1, this.canvas.clientWidth);
     const height = Math.max(1, this.canvas.clientHeight);
+    this.mobileLayout = this.quality.mobile || width <= 720;
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
-    this.camera.fov = this.quality.mobile ? 55 : 47;
+    this.camera.fov = this.mobileLayout ? 58 : 50;
     this.camera.updateProjectionMatrix();
     if (this.environment) {
       this.environment.material.uniforms.uViewportAspect.value = this.camera.aspect;
@@ -613,23 +620,24 @@ export class ExperienceScene {
         this.drawingBufferSize,
       );
       this.updateEnvironmentFraming();
-      const layout = this.quality.mobile ? CHILD_LAYOUT.mobile : CHILD_LAYOUT.desktop;
+      const layout = this.mobileLayout ? CHILD_LAYOUT.mobile : CHILD_LAYOUT.desktop;
       if (this.child) this.applyChildLayout(this.child, layout.standing);
       if (this.childLookback)
         this.applyChildLayout(this.childLookback, layout.lookback);
-      const childX = this.quality.mobile ? 0.52 : 0.86;
+      const childX = this.mobileLayout ? 0.52 : 0.86;
       this.childReflection?.position.set(
         childX,
-        this.quality.mobile ? -3.42 : -3.25,
+        this.mobileLayout ? -3.42 : -3.25,
         -0.42,
       );
       this.childShadow?.position.set(
         childX,
-        this.quality.mobile ? -2.57 : -2.38,
+        this.mobileLayout ? -2.57 : -2.38,
         -0.05,
       );
     }
     this.post?.setSize(width, height);
+    this.setProgress(this.progress);
   }
 
   private updateEnvironmentFraming() {
@@ -693,9 +701,9 @@ export class ExperienceScene {
   }
 
   private updateChildParallax() {
-    const layout = this.quality.mobile ? CHILD_LAYOUT.mobile : CHILD_LAYOUT.desktop;
-    const pointerX = this.quality.mobile ? 0 : this.pointer.x;
-    const pointerY = this.quality.mobile ? 0 : this.pointer.y;
+    const layout = this.mobileLayout ? CHILD_LAYOUT.mobile : CHILD_LAYOUT.desktop;
+    const pointerX = this.mobileLayout ? 0 : this.pointer.x;
+    const pointerY = this.mobileLayout ? 0 : this.pointer.y;
     if (this.child) {
       this.child.position.set(
         layout.standing.position[0] + pointerX * 0.045,
@@ -713,11 +721,11 @@ export class ExperienceScene {
       this.childLookback.rotation.z = layout.lookback.rotation - pointerX * 0.004;
     }
     if (this.childReflection) {
-      const reflectionX = this.quality.mobile ? 0.52 : 0.86;
+      const reflectionX = this.mobileLayout ? 0.52 : 0.86;
       this.childReflection.position.x = reflectionX + pointerX * 0.024;
     }
     if (this.childShadow) {
-      const shadowX = this.quality.mobile ? 0.52 : 0.86;
+      const shadowX = this.mobileLayout ? 0.52 : 0.86;
       this.childShadow.position.x = shadowX + pointerX * 0.01;
     }
   }

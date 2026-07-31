@@ -10,6 +10,9 @@ gsap.registerPlugin(ScrollTrigger);
 const REVEAL_TRIGGER_TIME = 0.72;
 const BASE_TIMELINE_DURATION = 4.32;
 const POST_REVEAL_SLOWDOWN = 1.15;
+const UMBRELLA_FADE_TIME = 2.68;
+const UMBRELLA_START_TIME = 3.05;
+const UMBRELLA_TEXT_INTRO_DURATION = 2.15;
 
 const slowPostRevealTime = (time: number) =>
   REVEAL_TRIGGER_TIME +
@@ -210,17 +213,24 @@ export const createNarrativeTimeline = (
   const introState = { light: 0, environment: 0, child: 0 };
   const narrative = { progress: 0, lightning: 0.12 };
   const editorialState = { progress: 0 };
+  const umbrellaEntranceState = { progress: 0 };
   const umbrellaState = { progress: 0 };
+  const umbrellaTextIntroState = { progress: 0 };
   const textRevealState = { progress: 0 };
   const rainState = { visibility: 1 };
   let scrollTimeline: gsap.core.Timeline | undefined;
   let textRevealTimeline: gsap.core.Timeline | undefined;
+  let umbrellaTextIntroTimeline: gsap.core.Timeline | undefined;
   let scrollNormalizer: { kill: () => void } | undefined;
   let destroyScrollGovernor: (() => void) | undefined;
   let textRevealStarted = false;
   let textRevealComplete = false;
+  let umbrellaTextIntroStarted = false;
+  let umbrellaTextIntroComplete = false;
   let sequenceLockY: number | undefined;
+  let sequenceLockProgress: number | undefined;
   let refreshFrame: number | undefined;
+  let progressBeforeRefresh: number | undefined;
   let chapterState: "held" | "overlay" | "released" | undefined;
   const waterReveal = createWaterTextReveal({
     container: chapter,
@@ -238,7 +248,12 @@ export const createNarrativeTimeline = (
   );
   const umbrellaTransformation = umbrellaChapter
     ? createUmbrellaChapter(umbrellaChapter)
-    : { setProgress: () => undefined, destroy: () => undefined };
+    : {
+        setEntranceProgress: () => undefined,
+        setProgress: () => undefined,
+        setTextIntroProgress: () => undefined,
+        destroy: () => undefined,
+      };
   const editorialFinalElements = [
     ...chapter.querySelectorAll<HTMLElement>(
       "[data-editorial-final-image], [data-editorial-hidden-message]",
@@ -250,6 +265,7 @@ export const createNarrativeTimeline = (
 
   const unlockSequence = () => {
     sequenceLockY = undefined;
+    sequenceLockProgress = undefined;
     delete chapter.dataset.sequenceLocked;
   };
 
@@ -265,10 +281,11 @@ export const createNarrativeTimeline = (
     unlockSequence();
   };
 
-  const playTextReveal = (lockY = scrollY) => {
+  const playTextReveal = (lockY = scrollY, lockProgress = 0) => {
     if (textRevealStarted) return;
     textRevealStarted = true;
     sequenceLockY = lockY;
+    sequenceLockProgress = lockProgress;
     chapter.dataset.sequenceLocked = "true";
     scrollTo(0, lockY);
     textRevealTimeline = gsap
@@ -296,10 +313,51 @@ export const createNarrativeTimeline = (
       );
   };
 
+  const resetUmbrellaTextIntro = () => {
+    umbrellaTextIntroTimeline?.kill();
+    umbrellaTextIntroTimeline = undefined;
+    umbrellaTextIntroStarted = false;
+    umbrellaTextIntroComplete = false;
+    umbrellaTextIntroState.progress = 0;
+    umbrellaTransformation.setTextIntroProgress(0);
+    unlockSequence();
+  };
+
+  const playUmbrellaTextIntro = (lockY: number, lockProgress: number) => {
+    if (umbrellaTextIntroStarted) return;
+    umbrellaTextIntroStarted = true;
+    sequenceLockY = lockY;
+    sequenceLockProgress = lockProgress;
+    chapter.dataset.sequenceLocked = "true";
+    scrollTo(0, lockY);
+    umbrellaTextIntroTimeline = gsap.timeline({
+      onComplete: () => {
+        umbrellaTextIntroComplete = true;
+        unlockSequence();
+      },
+    });
+    umbrellaTextIntroTimeline.to(umbrellaTextIntroState, {
+      progress: 1,
+      duration: UMBRELLA_TEXT_INTRO_DURATION,
+      ease: "power2.inOut",
+      onUpdate: () =>
+        umbrellaTransformation.setTextIntroProgress(
+          umbrellaTextIntroState.progress,
+        ),
+    });
+  };
+
   const renderIntro = () => {
     scene.setEnvironmentVisibility(introState.environment);
     scene.setChildVisibility(introState.child);
     scene.setLightning(introState.light);
+  };
+
+  const captureProgressBeforeRefresh = () => {
+    const trigger = scrollTimeline?.scrollTrigger;
+    if (trigger && trigger.progress > 0) {
+      progressBeforeRefresh = trigger.progress;
+    }
   };
 
   const syncChapterState = (progress: number, released = false) => {
@@ -341,26 +399,57 @@ export const createNarrativeTimeline = (
           const duration = scrollTimeline?.duration() ?? 0;
           if (!duration) return;
           const revealThreshold = REVEAL_TRIGGER_TIME / duration;
+          const umbrellaThreshold =
+            slowPostRevealTime(UMBRELLA_START_TIME) / duration;
           if (trigger.progress >= revealThreshold && !textRevealStarted) {
             const lockY =
               trigger.start + (trigger.end - trigger.start) * revealThreshold;
-            playTextReveal(lockY);
+            playTextReveal(lockY, revealThreshold);
           } else if (
             trigger.progress < revealThreshold - 0.008 &&
             textRevealComplete
           ) {
             resetTextReveal();
           }
+          if (
+            umbrellaChapter &&
+            textRevealComplete &&
+            trigger.progress >= umbrellaThreshold &&
+            !umbrellaTextIntroStarted
+          ) {
+            const lockY =
+              trigger.start + (trigger.end - trigger.start) * umbrellaThreshold;
+            playUmbrellaTextIntro(lockY, umbrellaThreshold);
+          } else if (
+            trigger.progress < umbrellaThreshold - 0.008 &&
+            umbrellaTextIntroComplete
+          ) {
+            resetUmbrellaTextIntro();
+          }
         },
         onLeave: () => syncChapterState(1, true),
         onEnterBack: (trigger) =>
           syncChapterState(Math.min(1, trigger.progress * 2)),
         onLeaveBack: () => syncChapterState(0),
-        onRefresh: (trigger) =>
+        onRefresh: (trigger) => {
+          const preservedProgress = progressBeforeRefresh;
+          if (preservedProgress !== undefined) {
+            progressBeforeRefresh = undefined;
+            const nextScroll =
+              trigger.start + (trigger.end - trigger.start) * preservedProgress;
+            trigger.scroll(nextScroll);
+            scrollTimeline?.progress(preservedProgress);
+          }
+          if (sequenceLockY !== undefined) {
+            sequenceLockY =
+              trigger.start +
+              (trigger.end - trigger.start) * (sequenceLockProgress ?? 0);
+          }
           syncChapterState(
-            Math.min(1, trigger.progress * 2),
-            trigger.progress >= 1,
-          ),
+            Math.min(1, (preservedProgress ?? trigger.progress) * 2),
+            (preservedProgress ?? trigger.progress) >= 1,
+          );
+        },
       },
     });
 
@@ -572,10 +661,25 @@ export const createNarrativeTimeline = (
           editorialFinalElements,
           {
             opacity: 0,
-            duration: slowPostRevealDuration(0.26),
+            duration: slowPostRevealDuration(0.36),
             ease: "power2.inOut",
           },
-          slowPostRevealTime(2.34),
+          slowPostRevealTime(UMBRELLA_FADE_TIME),
+        )
+        .to(
+          umbrellaEntranceState,
+          {
+            progress: 1,
+            duration: slowPostRevealDuration(
+              UMBRELLA_START_TIME - UMBRELLA_FADE_TIME,
+            ),
+            ease: "power2.inOut",
+            onUpdate: () =>
+              umbrellaTransformation.setEntranceProgress(
+                umbrellaEntranceState.progress,
+              ),
+          },
+          slowPostRevealTime(UMBRELLA_FADE_TIME),
         )
         .to(
           umbrellaState,
@@ -586,7 +690,7 @@ export const createNarrativeTimeline = (
             onUpdate: () =>
               umbrellaTransformation.setProgress(umbrellaState.progress),
           },
-          slowPostRevealTime(2.38),
+          slowPostRevealTime(UMBRELLA_START_TIME),
         );
     }
 
@@ -626,6 +730,7 @@ export const createNarrativeTimeline = (
   });
   renderIntro();
   createScroll();
+  ScrollTrigger.addEventListener("refreshInit", captureProgressBeforeRefresh);
 
   const intro = gsap.timeline({
     defaults: { ease: "power2.inOut" },
@@ -665,10 +770,15 @@ export const createNarrativeTimeline = (
     destroy: () => {
       intro.kill();
       textRevealTimeline?.kill();
+      umbrellaTextIntroTimeline?.kill();
       unlockSequence();
       scrollNormalizer?.kill();
       destroyScrollGovernor?.();
       if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame);
+      ScrollTrigger.removeEventListener(
+        "refreshInit",
+        captureProgressBeforeRefresh,
+      );
       scrollTimeline?.scrollTrigger?.kill();
       scrollTimeline?.kill();
       chapter.classList.remove("experience-chapter--held");
@@ -682,7 +792,9 @@ export const createNarrativeTimeline = (
         introState,
         narrative,
         editorialState,
+        umbrellaEntranceState,
         umbrellaState,
+        umbrellaTextIntroState,
         textRevealState,
         rainState,
         copy,

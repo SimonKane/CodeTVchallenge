@@ -2,7 +2,9 @@ import { gsap } from "gsap";
 import { createUmbrellaRainCanvas } from "./UmbrellaRainCanvas";
 
 export interface UmbrellaChapterController {
+  setEntranceProgress: (progress: number) => void;
   setProgress: (progress: number) => void;
+  setTextIntroProgress: (progress: number) => void;
   destroy: () => void;
 }
 
@@ -15,6 +17,8 @@ interface PushVector {
 const fract = (value: number) => value - Math.floor(value);
 const hash = (value: number) => fract(Math.sin(value) * 43758.5453123);
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
+const BACKGROUND_READY_TIME = 0.6;
+const TEXT_READY_TIME = 1.9;
 
 const splitIntoRainCharacters = (element: HTMLElement) => {
   const textNodes: Text[] = [];
@@ -115,7 +119,9 @@ export const createUmbrellaChapter = (
     !exposure
   ) {
     return {
+      setEntranceProgress: () => undefined,
       setProgress: () => undefined,
+      setTextIntroProgress: () => undefined,
       destroy: () => undefined,
     };
   }
@@ -130,6 +136,9 @@ export const createUmbrellaChapter = (
   const pushVectors = createPushVectors(rainCharacters, stage);
   const rainCanvas = createUmbrellaRainCanvas(canopyRain, openUmbrella);
   const rainState = { visibility: 0 };
+  let entranceProgress = 0;
+  let requestedProgress = 0;
+  let textIntroProgress = 0;
 
   gsap.set(stage, { opacity: 0 });
   gsap.set(closedUmbrella, {
@@ -168,17 +177,17 @@ export const createUmbrellaChapter = (
 
   const timeline = gsap.timeline({ paused: true });
   timeline
-    .to(stage, { opacity: 1, duration: 0.28, ease: "power2.inOut" }, 0)
+    .to(stage, { opacity: 1, duration: 0.52, ease: "power2.inOut" }, 0)
     .to(
       closedUmbrella,
       {
         opacity: 1,
         scale: 1,
         filter: "brightness(1.12) contrast(1.12)",
-        duration: 0.34,
-        ease: "power2.out",
+        duration: 0.46,
+        ease: "power2.inOut",
       },
-      0.16,
+      0.12,
     )
     .to(
       rainCharacters,
@@ -195,24 +204,24 @@ export const createUmbrellaChapter = (
         stagger: { amount: 0.72, from: "random" },
         ease: "power3.out",
       },
-      0.36,
+      0.68,
     )
-    .to(exposure, { opacity: 0.92, duration: 0.025 }, 1.815)
-    .to(exposure, { opacity: 0.08, duration: 0.09 }, 1.84)
-    .to(exposure, { opacity: 0.62, duration: 0.025 }, 1.93)
-    .to(exposure, { opacity: 0, duration: 0.15 }, 1.955)
+    .to(exposure, { opacity: 0.82, duration: 0.035 }, 2.14)
+    .to(exposure, { opacity: 0.08, duration: 0.1 }, 2.175)
+    .to(exposure, { opacity: 0.52, duration: 0.025 }, 2.275)
+    .to(exposure, { opacity: 0, duration: 0.17 }, 2.3)
     .to(
       closedUmbrella,
       {
-        scale: 1.04,
+        scale: 1.025,
         filter: "brightness(1.7) contrast(1.2)",
-        duration: 0.04,
+        duration: 0.06,
         ease: "power2.in",
       },
-      1.8,
+      2.1,
     )
-    .set(closedUmbrella, { opacity: 0 }, 1.84)
-    .set(openUmbrella, { opacity: 1 }, 1.84)
+    .to(closedUmbrella, { opacity: 0, duration: 0.08 }, 2.16)
+    .set(openUmbrella, { opacity: 1 }, 2.18)
     .to(
       openUmbrella,
       {
@@ -220,10 +229,21 @@ export const createUmbrellaChapter = (
         y: 0,
         clipPath: "circle(78% at 50% 37%)",
         filter: "brightness(1.1) contrast(1.1)",
-        duration: 0.34,
+        duration: 0.42,
         ease: "power3.out",
       },
-      1.84,
+      2.18,
+    )
+    .to(
+      openUmbrella,
+      {
+        scale: 0.985,
+        duration: 0.12,
+        ease: "power2.inOut",
+        yoyo: true,
+        repeat: 1,
+      },
+      2.52,
     )
     .to(
       rainCharacters,
@@ -238,7 +258,7 @@ export const createUmbrellaChapter = (
         stagger: { amount: 0.12, from: "center" },
         ease: "power3.out",
       },
-      1.815,
+      2.14,
     )
     .to(
       rainState,
@@ -248,9 +268,9 @@ export const createUmbrellaChapter = (
         ease: "power2.out",
         onUpdate: () => rainCanvas.setVisibility(rainState.visibility),
       },
-      2.08,
+      2.42,
     )
-    .to(shelterGlow, { opacity: 1, duration: 0.55, ease: "power2.out" }, 2.26)
+    .to(shelterGlow, { opacity: 1, duration: 0.55, ease: "power2.out" }, 2.6)
     .to(
       shelteredChild,
       {
@@ -261,7 +281,7 @@ export const createUmbrellaChapter = (
         duration: 0.82,
         ease: "power3.out",
       },
-      2.3,
+      2.64,
     )
     .to(
       safeBlocks,
@@ -272,23 +292,48 @@ export const createUmbrellaChapter = (
         stagger: 0.12,
         ease: "power3.out",
       },
-      2.36,
+      2.7,
     )
     .to({}, { duration: 0.72 });
 
+  const renderProgress = () => {
+    const timelineDuration = timeline.duration();
+    const effectiveTime =
+      requestedProgress > 0 || textIntroProgress >= 1
+        ? TEXT_READY_TIME +
+          requestedProgress * (timelineDuration - TEXT_READY_TIME)
+        : textIntroProgress > 0
+          ? BACKGROUND_READY_TIME +
+            textIntroProgress * (TEXT_READY_TIME - BACKGROUND_READY_TIME)
+          : entranceProgress * BACKGROUND_READY_TIME;
+    experienceChapter?.classList.toggle(
+      "experience-chapter--umbrella-active",
+      entranceProgress >= 0.98 || textIntroProgress > 0 || requestedProgress > 0,
+    );
+    timeline.time(effectiveTime, false);
+    rainCanvas.invalidateGeometry();
+  };
+
   return {
+    setEntranceProgress: (progress) => {
+      entranceProgress = clamp(progress);
+      renderProgress();
+    },
     setProgress: (progress) => {
-      const clampedProgress = clamp(progress);
-      experienceChapter?.classList.toggle(
-        "experience-chapter--umbrella-active",
-        clampedProgress > 0.001,
-      );
-      timeline.progress(clampedProgress);
-      rainCanvas.invalidateGeometry();
+      requestedProgress = clamp(progress);
+      renderProgress();
+    },
+    setTextIntroProgress: (progress) => {
+      textIntroProgress = clamp(progress);
+      renderProgress();
     },
     destroy: () => {
-      experienceChapter?.classList.remove(
+      entranceProgress = 0;
+      requestedProgress = 0;
+      textIntroProgress = 0;
+      experienceChapter?.classList.toggle(
         "experience-chapter--umbrella-active",
+        false,
       );
       timeline.kill();
       rainCanvas.destroy();
