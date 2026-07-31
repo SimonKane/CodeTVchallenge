@@ -356,11 +356,31 @@
 
 .experience-chapter--editorial-ready
   .rain-text-reveal--complete
+  .rain-letter.editorial-source-letter {
+  --leaf-x: 0px;
+  --leaf-y: 0px;
+  --leaf-rotation: 0deg;
+  --leaf-scale: 1;
+  --leaf-scale-x: 1;
+  --leaf-scale-y: 1;
+  position: relative;
+  z-index: 2;
+  transform:
+    translate3d(var(--leaf-x), var(--leaf-y), 0)
+    rotate(var(--leaf-rotation))
+    scale(var(--leaf-scale))
+    scaleX(var(--leaf-scale-x))
+    scaleY(var(--leaf-scale-y)) !important;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity, filter;
+}
+
+.experience-chapter--editorial-ready
+  .rain-text-reveal--complete
   .rain-letter.editorial-source-letter--selected {
   --selected-opacity: 1;
   --selected-shadow: none;
-  position: relative;
-  z-index: 2;
+  z-index: 5;
   opacity: var(--selected-opacity) !important;
   text-shadow: var(--selected-shadow) !important;
 }
@@ -368,22 +388,13 @@
 .experience-chapter--editorial-ready
   .rain-text-reveal--complete
   .rain-letter.editorial-source-letter--washed {
-  --wash-progress: 0;
   --wash-opacity: 1;
-  --wash-x: 0px;
-  --wash-y: 0px;
-  --wash-scale-x: 1;
-  --wash-scale-y: 1;
   --wash-blur: 0px;
   --wash-trail: 0em;
   --wash-trail-opacity: 0;
   --wash-drop-opacity: 0;
   --wash-shadow: rgba(190, 218, 229, 0);
   opacity: var(--wash-opacity) !important;
-  transform:
-    translate3d(var(--wash-x), var(--wash-y), 0)
-    scaleX(var(--wash-scale-x))
-    scaleY(var(--wash-scale-y)) !important;
   filter: blur(var(--wash-blur)) !important;
   text-shadow: 0 0.55em 0.18em var(--wash-shadow) !important;
 }

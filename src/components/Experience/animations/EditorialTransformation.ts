@@ -20,6 +20,16 @@ interface EditorialTransformationElements {
   currentImage: HTMLElement;
 }
 
+interface LeafFlight {
+  x: number;
+  y: number;
+  rotation: number;
+  scale: number;
+  midX: number;
+  midY: number;
+  midRotation: number;
+}
+
 export interface EditorialTransformationController {
   setProgress: (progress: number) => void;
   destroy: () => void;
@@ -27,6 +37,47 @@ export interface EditorialTransformationController {
 
 const normalize = (value: string) =>
   value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase("sv");
+
+const fract = (value: number) => value - Math.floor(value);
+
+const hash = (value: number) =>
+  fract(Math.sin(value) * 43758.5453123);
+
+const measureWithoutInlineTransform = (element: HTMLElement) => {
+  const transform = element.style.transform;
+  element.style.transform = "none";
+  const bounds = element.getBoundingClientRect();
+  element.style.transform = transform;
+  return bounds;
+};
+
+const createLeafFlight = (
+  letter: HTMLElement,
+  index: number,
+  width: number,
+  height: number,
+): LeafFlight => {
+  const bounds = measureWithoutInlineTransform(letter);
+  const seed = hash((index + 1) * 91.713);
+  const horizontalSeed = hash((index + 1) * 12.9898 + 4.1414);
+  const verticalSeed = hash((index + 1) * 78.233 + 17.1717);
+  const targetX = width * (0.035 + horizontalSeed * 0.93);
+  const targetY = height * (0.055 + verticalSeed * 0.86);
+  const x = targetX - (bounds.left + bounds.width / 2);
+  const y = targetY - (bounds.top + bounds.height / 2);
+  const direction = index % 2 === 0 ? -1 : 1;
+  const curl = direction * width * (0.08 + seed * 0.1);
+
+  return {
+    x,
+    y,
+    rotation: direction * (115 + seed * 310),
+    scale: 0.68 + seed * 0.58,
+    midX: x * 0.42 + curl,
+    midY: y * 0.28 - height * (0.08 + seed * 0.13),
+    midRotation: direction * (55 + seed * 145),
+  };
+};
 
 const selectSourceLetters = (
   letters: HTMLElement[],
@@ -77,6 +128,7 @@ export const createEditorialTransformation = ({
   let timeline: gsap.core.Timeline | undefined;
   let debugOverlay: HTMLElement | undefined;
   const flightOrigins: Array<{ x: number; y: number; scale: number }> = [];
+  const leafFlights: LeafFlight[] = [];
 
   if (
     !finalMessage ||
@@ -96,9 +148,27 @@ export const createEditorialTransformation = ({
   );
   washedLetters.forEach((letter, index) => {
     letter.classList.add("editorial-source-letter--washed");
-    letter.style.setProperty("--wash-drift", `${((index % 5) - 2) * 1.5}px`);
   });
+  sourceLetters.forEach((letter) =>
+    letter.classList.add("editorial-source-letter"),
+  );
 
+  gsap.set(sourceLetters, {
+    "--leaf-x": "0px",
+    "--leaf-y": "0px",
+    "--leaf-rotation": "0deg",
+    "--leaf-scale": 1,
+    "--leaf-scale-x": 1,
+    "--leaf-scale-y": 1,
+  });
+  gsap.set(washedLetters, {
+    "--wash-opacity": 1,
+    "--wash-blur": "0px",
+    "--wash-trail": "0em",
+    "--wash-trail-opacity": 0,
+    "--wash-drop-opacity": 0,
+  });
+  gsap.set(selectedLetters, { "--selected-opacity": 1 });
   gsap.set(lightning, { opacity: 0 });
   gsap.set(finalImage, {
     opacity: 0,
@@ -109,16 +179,34 @@ export const createEditorialTransformation = ({
   gsap.set(finalMessage, { opacity: 0 });
 
   const createTimeline = () => {
+    const viewportWidth = chapter.clientWidth || window.innerWidth;
+    const viewportHeight = chapter.clientHeight || window.innerHeight;
+
+    sourceLetters.forEach((letter, index) => {
+      leafFlights[index] = createLeafFlight(
+        letter,
+        index,
+        viewportWidth,
+        viewportHeight,
+      );
+    });
+
     targetLetters.forEach((target, index) => {
-      const sourceBounds = selectedLetters[index].getBoundingClientRect();
+      const sourceBounds = measureWithoutInlineTransform(selectedLetters[index]);
       const targetBounds = target.getBoundingClientRect();
       const sourceSize = Number.parseFloat(
         getComputedStyle(selectedLetters[index]).fontSize,
       );
       const targetSize = Number.parseFloat(getComputedStyle(target).fontSize);
       const origin = {
-        x: sourceBounds.left - targetBounds.left,
-        y: sourceBounds.top - targetBounds.top,
+        x:
+          sourceBounds.left +
+          sourceBounds.width / 2 -
+          (targetBounds.left + targetBounds.width / 2),
+        y:
+          sourceBounds.top +
+          sourceBounds.height / 2 -
+          (targetBounds.top + targetBounds.height / 2),
         scale: Math.max(0.18, sourceSize / targetSize),
       };
       flightOrigins[index] = origin;
@@ -127,6 +215,7 @@ export const createEditorialTransformation = ({
         y: origin.y,
         scale: origin.scale,
         rotation: 0,
+        transformOrigin: "50% 50%",
         opacity: 0,
       });
     });
@@ -139,136 +228,180 @@ export const createEditorialTransformation = ({
         {
           color: "#8f151a",
           "--selected-shadow":
-            "0 0 0.08em rgba(194,40,47,.55), 0 0 .42em rgba(53,6,9,.48)",
-          duration: 0.2,
+            "0 0 0.08em rgba(194,40,47,.62), 0 0 .42em rgba(53,6,9,.52)",
+          duration: 0.24,
           stagger: 0.008,
           ease: "power2.inOut",
         },
-        0.15,
+        0.12,
+      )
+      .to(
+        sourceLetters,
+        {
+          "--leaf-x": (index: number) => `${leafFlights[index].midX}px`,
+          "--leaf-y": (index: number) => `${leafFlights[index].midY}px`,
+          "--leaf-rotation": (index: number) =>
+            `${leafFlights[index].midRotation}deg`,
+          "--leaf-scale": (index: number) => leafFlights[index].scale * 0.9,
+          duration: 0.42,
+          stagger: { each: 0.0012, from: "random" },
+          ease: "power2.out",
+        },
+        0.28,
+      )
+      .to(
+        sourceLetters,
+        {
+          "--leaf-x": (index: number) => `${leafFlights[index].x}px`,
+          "--leaf-y": (index: number) => `${leafFlights[index].y}px`,
+          "--leaf-rotation": (index: number) =>
+            `${leafFlights[index].rotation}deg`,
+          "--leaf-scale": (index: number) => leafFlights[index].scale,
+          duration: 0.46,
+          stagger: { each: 0.0015, from: "random" },
+          ease: "sine.inOut",
+        },
+        0.66,
+      )
+      .to(
+        selectedLetters,
+        {
+          color: "#e32636",
+          "--selected-shadow":
+            "0 0 .1em rgba(255,115,123,.98), 0 0 .5em rgba(239,35,51,.98), 0 0 1.25em rgba(175,8,24,.9)",
+          duration: 0.2,
+          stagger: 0.012,
+          ease: "power2.inOut",
+        },
+        1.05,
       )
       .to(
         washedLetters,
         {
-          "--wash-progress": 1,
+          "--leaf-x": (index: number, target: HTMLElement) => {
+            const sourceIndex = sourceLetters.indexOf(target);
+            const flight = leafFlights[sourceIndex];
+            const drift =
+              ((sourceIndex % 7) - 3) * 18 +
+              (sourceIndex % 2 === 0 ? -1 : 1) * viewportWidth * 0.025;
+            return `${flight.x + drift}px`;
+          },
+          "--leaf-y": (index: number, target: HTMLElement) => {
+            const sourceIndex = sourceLetters.indexOf(target);
+            return `${leafFlights[sourceIndex].y + viewportHeight * 1.12}px`;
+          },
+          "--leaf-rotation": (index: number, target: HTMLElement) => {
+            const sourceIndex = sourceLetters.indexOf(target);
+            const direction = sourceIndex % 2 === 0 ? -1 : 1;
+            return `${leafFlights[sourceIndex].rotation + direction * (150 + (sourceIndex % 5) * 38)}deg`;
+          },
+          "--leaf-scale-x": 0.16,
+          "--leaf-scale-y": 2.25,
           "--wash-opacity": 0,
-          "--wash-x": (index: number, target: HTMLElement) =>
-            target.style.getPropertyValue("--wash-drift"),
-          "--wash-y": (index: number) => `${96 + (index % 13) * 9}px`,
-          "--wash-scale-x": 0.12,
-          "--wash-scale-y": 2.35,
-          "--wash-blur": "1.4px",
-          "--wash-trail": "4.6em",
+          "--wash-blur": "1.5px",
+          "--wash-trail": "5.2em",
           "--wash-trail-opacity": 0.82,
           "--wash-drop-opacity": 0.94,
           "--wash-shadow": "rgba(190,218,229,.3)",
-          duration: 0.2,
-          stagger: { each: 0.0009, from: "random" },
-          ease: "power2.inOut",
+          duration: 0.5,
+          stagger: { each: 0.0011, from: "random" },
+          ease: "power2.in",
         },
-        0.39,
+        1.28,
       )
-      .set(finalMessage, { opacity: 1 }, 0.76)
-      .to(targetLetters, { opacity: 1, duration: 0.04, ease: "sine.inOut" }, 0.76)
-      .to(
-        selectedLetters,
-        { "--selected-opacity": 0, duration: 0.04, ease: "sine.inOut" },
-        0.76,
-      )
-      .to(lightning, { opacity: 1, duration: 0.012 }, 1.66)
+      .to(lightning, { opacity: 1, duration: 0.016 }, 2.82)
       .to(
         lightningState,
         {
           progress: 1,
-          duration: 0.24,
+          duration: 0.32,
           ease: "none",
           onUpdate: () => lightningCanvas.setProgress(lightningState.progress),
         },
-        1.66,
+        2.82,
       )
-      .to(exposure, { opacity: 0.86, duration: 0.014 }, 1.685)
-      .to(exposure, { opacity: 0.14, duration: 0.075 }, 1.699)
-      .to(exposure, { opacity: 0.62, duration: 0.014 }, 1.774)
-      .to(exposure, { opacity: 0, duration: 0.11 }, 1.788)
+      .to(exposure, { opacity: 0.86, duration: 0.018 }, 2.845)
+      .to(exposure, { opacity: 0.14, duration: 0.1 }, 2.863)
+      .to(exposure, { opacity: 0.62, duration: 0.018 }, 2.963)
+      .to(exposure, { opacity: 0, duration: 0.14 }, 2.981)
       .to(
         finalImage,
         {
           opacity: 1,
           clipPath: "inset(0% 0% 0% 0%)",
-          duration: 0.19,
+          duration: 0.25,
           ease: "power2.inOut",
         },
-        1.68,
+        2.84,
       )
       .to(
         currentImage,
         {
           opacity: 0,
           x: "-8vw",
-          duration: 0.15,
+          duration: 0.22,
           ease: "power2.inOut",
         },
-        1.71,
+        2.88,
       )
-      .to(copy, { opacity: 0, duration: 0.12, ease: "power2.out" }, 1.71)
-      .to(lightning, { opacity: 0, duration: 0.1, ease: "power2.out" }, 1.84)
+      .to(copy, { opacity: 0, duration: 0.18, ease: "power2.out" }, 2.88)
+      .to(lightning, { opacity: 0, duration: 0.14, ease: "power2.out" }, 3.04)
       .to(
         finalImage,
         {
           x: 0,
           filter: "brightness(.86) saturate(.7) contrast(1.1)",
-          duration: 0.15,
+          duration: 0.22,
           ease: "power3.out",
         },
-        1.73,
+        2.9,
       )
       .fromTo(
         finalMessage.querySelector("p"),
         { opacity: 0, y: 14 },
-        { opacity: 1, y: 0, duration: 0.07, ease: "power2.out" },
-        1.88,
+        { opacity: 1, y: 0, duration: 0.12, ease: "power2.out" },
+        3.12,
       );
 
     targetLetters.forEach((target, index) => {
       const origin = flightOrigins[index];
-      const direction = index % 2 === 0 ? -1 : 1;
-      const spread = direction * (105 + (index % 3) * 58);
-      const lift = 85 + (index % 4) * 38;
-      const spin =
-        index % 3 === 0 ? direction * (45 + index * 7) : direction * 16;
+      const sourceIndex = sourceLetters.indexOf(selectedLetters[index]);
+      const flight = leafFlights[sourceIndex];
+
+      timeline?.set(
+        target,
+        {
+          x: origin.x + flight.x,
+          y: origin.y + flight.y,
+          scale: origin.scale * flight.scale,
+          rotation: flight.rotation,
+          opacity: 1,
+        },
+        1.91,
+      );
+      timeline?.set(
+        selectedLetters[index],
+        { "--selected-opacity": 0 },
+        1.91,
+      );
       timeline?.to(
         target,
         {
           keyframes: [
             {
-              x: origin.x + spread * 0.72,
-              y: origin.y - lift * 0.62,
-              scale: origin.scale * 0.9,
-              rotation: spin * 0.72,
-              duration: 0.12,
-              ease: "power2.out",
-            },
-            {
-              x: origin.x * 0.78 + spread * 1.12,
-              y: origin.y * 0.74 - lift * 1.08,
-              scale: 0.76,
-              rotation: spin,
-              duration: 0.12,
+              x: origin.x + flight.x * 0.7,
+              y: origin.y + flight.y * 0.72 - viewportHeight * 0.035,
+              scale: Math.max(0.5, origin.scale * 1.08),
+              rotation: flight.rotation * 0.56,
+              duration: 0.22,
               ease: "sine.inOut",
             },
             {
-              x: origin.x * 0.48 - spread * 0.34,
-              y: origin.y * 0.46 + direction * lift * 0.24,
-              scale: 0.82,
-              rotation: -spin * 0.46,
-              duration: 0.15,
-              ease: "sine.inOut",
-            },
-            {
-              x: origin.x * 0.14 + spread * 0.1,
-              y: origin.y * 0.13 - lift * 0.07,
-              scale: 0.95,
-              rotation: spin * 0.08,
-              duration: 0.14,
+              x: origin.x * 0.22,
+              y: origin.y * 0.2,
+              scale: 0.92,
+              rotation: flight.rotation * 0.08,
+              duration: 0.26,
               ease: "power2.inOut",
             },
             {
@@ -276,14 +409,15 @@ export const createEditorialTransformation = ({
               y: 0,
               scale: 1,
               rotation: 0,
-              duration: 0.12,
-              ease: "power3.inOut",
+              duration: 0.18,
+              ease: "power3.out",
             },
           ],
         },
-        0.8 + index * 0.002,
+        1.96 + index * 0.008,
       );
     });
+    timeline.set(finalMessage, { opacity: 1 }, 1.91);
 
     if (EDITORIAL_DEBUG.enabled) {
       debugOverlay = document.createElement("pre");
@@ -330,8 +464,10 @@ export const createEditorialTransformation = ({
       );
       washedLetters.forEach((letter) => {
         letter.classList.remove("editorial-source-letter--washed");
-        letter.style.removeProperty("--wash-drift");
       });
+      sourceLetters.forEach((letter) =>
+        letter.classList.remove("editorial-source-letter"),
+      );
       chapter.classList.remove("experience-chapter--editorial-ready");
       gsap.killTweensOf([
         selectedLetters,

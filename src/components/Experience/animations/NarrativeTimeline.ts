@@ -157,10 +157,10 @@ export const createNarrativeTimeline = (
       scrollTrigger: {
         trigger: root,
         start: "top top",
-        end: () => `+=${innerHeight * 5.8}`,
+        end: () => `+=${innerHeight * 7.2}`,
         pin: true,
         pinSpacing: true,
-        scrub: 0.65,
+        scrub: 0.85,
         anticipatePin: 1,
         invalidateOnRefresh: true,
         onLeave: () => syncChapterState(1, true),
@@ -371,7 +371,7 @@ export const createNarrativeTimeline = (
         editorialState,
         {
           progress: 1,
-          duration: 1,
+          duration: 1.5,
           ease: "none",
           onUpdate: () => {
             if (textRevealComplete) {
