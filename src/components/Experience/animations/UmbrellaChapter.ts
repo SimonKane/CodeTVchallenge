@@ -82,6 +82,9 @@ const createPushVectors = (
 export const createUmbrellaChapter = (
   chapter: HTMLElement,
 ): UmbrellaChapterController => {
+  const experienceChapter = chapter.closest<HTMLElement>(
+    "[data-experience-chapter]",
+  );
   const stage = chapter.querySelector<HTMLElement>("[data-umbrella-stage]");
   const closedUmbrella = chapter.querySelector<HTMLElement>(
     "[data-umbrella-closed]",
@@ -275,10 +278,18 @@ export const createUmbrellaChapter = (
 
   return {
     setProgress: (progress) => {
-      timeline.progress(clamp(progress));
+      const clampedProgress = clamp(progress);
+      experienceChapter?.classList.toggle(
+        "experience-chapter--umbrella-active",
+        clampedProgress > 0.001,
+      );
+      timeline.progress(clampedProgress);
       rainCanvas.invalidateGeometry();
     },
     destroy: () => {
+      experienceChapter?.classList.remove(
+        "experience-chapter--umbrella-active",
+      );
       timeline.kill();
       rainCanvas.destroy();
       gsap.killTweensOf([
