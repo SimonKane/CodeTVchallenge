@@ -18,7 +18,7 @@ const fract = (value: number) => value - Math.floor(value);
 const hash = (value: number) => fract(Math.sin(value) * 43758.5453123);
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 const BACKGROUND_READY_TIME = 0.6;
-const TEXT_READY_TIME = 1.9;
+const TEXT_READY_TIME = 2.42;
 
 const splitIntoRainCharacters = (element: HTMLElement) => {
   const textNodes: Text[] = [];
@@ -158,13 +158,13 @@ export const createUmbrellaChapter = (
   rainCanvas.setVisibility(0);
   gsap.set(rainCharacters, {
     opacity: 0,
-    x: (index: number) => `${(hash(index * 3.71) - 0.5) * 34}px`,
-    y: (index: number) => `${-70 - hash(index * 7.13 + 2.4) * 150}px`,
-    rotation: (index: number) => (hash(index * 5.29) - 0.5) * 22,
-    scaleX: 0.22,
-    scaleY: 1.85,
-    filter: "blur(1.8px)",
-    "--umbrella-rain-trail": 0.78,
+    x: (index: number) => `${(hash(index * 3.71) - 0.5) * 48}px`,
+    y: (index: number) => `${-110 - hash(index * 7.13 + 2.4) * 260}px`,
+    rotation: (index: number) => (hash(index * 5.29) - 0.5) * 28,
+    scaleX: 0.18,
+    scaleY: 2.15,
+    filter: "blur(2.2px)",
+    "--umbrella-rain-trail": 0.9,
   });
   gsap.set(safeBlocks, { opacity: 0, y: 22 });
   gsap.set(shelteredChild, {
@@ -200,16 +200,16 @@ export const createUmbrellaChapter = (
         scaleY: 1,
         filter: "blur(0px)",
         "--umbrella-rain-trail": 0,
-        duration: 0.42,
-        stagger: { amount: 0.72, from: "random" },
-        ease: "power3.out",
+        duration: 0.58,
+        stagger: { amount: 1.05, from: "random" },
+        ease: "power2.out",
       },
-      0.68,
+      0.72,
     )
-    .to(exposure, { opacity: 0.82, duration: 0.035 }, 2.14)
-    .to(exposure, { opacity: 0.08, duration: 0.1 }, 2.175)
-    .to(exposure, { opacity: 0.52, duration: 0.025 }, 2.275)
-    .to(exposure, { opacity: 0, duration: 0.17 }, 2.3)
+    .to(exposure, { opacity: 0.82, duration: 0.035 }, 2.82)
+    .to(exposure, { opacity: 0.08, duration: 0.1 }, 2.855)
+    .to(exposure, { opacity: 0.52, duration: 0.025 }, 2.955)
+    .to(exposure, { opacity: 0, duration: 0.17 }, 2.98)
     .to(
       closedUmbrella,
       {
@@ -218,10 +218,10 @@ export const createUmbrellaChapter = (
         duration: 0.06,
         ease: "power2.in",
       },
-      2.1,
+      2.78,
     )
-    .to(closedUmbrella, { opacity: 0, duration: 0.08 }, 2.16)
-    .set(openUmbrella, { opacity: 1 }, 2.18)
+    .to(closedUmbrella, { opacity: 0, duration: 0.08 }, 2.84)
+    .set(openUmbrella, { opacity: 1 }, 2.86)
     .to(
       openUmbrella,
       {
@@ -232,7 +232,7 @@ export const createUmbrellaChapter = (
         duration: 0.42,
         ease: "power3.out",
       },
-      2.18,
+      2.86,
     )
     .to(
       openUmbrella,
@@ -243,7 +243,7 @@ export const createUmbrellaChapter = (
         yoyo: true,
         repeat: 1,
       },
-      2.52,
+      3.2,
     )
     .to(
       rainCharacters,
@@ -258,7 +258,7 @@ export const createUmbrellaChapter = (
         stagger: { amount: 0.12, from: "center" },
         ease: "power3.out",
       },
-      2.14,
+      2.82,
     )
     .to(
       rainState,
@@ -268,9 +268,9 @@ export const createUmbrellaChapter = (
         ease: "power2.out",
         onUpdate: () => rainCanvas.setVisibility(rainState.visibility),
       },
-      2.42,
+      3.1,
     )
-    .to(shelterGlow, { opacity: 1, duration: 0.55, ease: "power2.out" }, 2.6)
+    .to(shelterGlow, { opacity: 1, duration: 0.55, ease: "power2.out" }, 3.28)
     .to(
       shelteredChild,
       {
@@ -281,7 +281,7 @@ export const createUmbrellaChapter = (
         duration: 0.82,
         ease: "power3.out",
       },
-      2.64,
+      3.32,
     )
     .to(
       safeBlocks,
@@ -292,14 +292,14 @@ export const createUmbrellaChapter = (
         stagger: 0.12,
         ease: "power3.out",
       },
-      2.7,
+      3.38,
     )
     .to({}, { duration: 0.72 });
 
   const renderProgress = () => {
     const timelineDuration = timeline.duration();
     const effectiveTime =
-      requestedProgress > 0 || textIntroProgress >= 1
+      textIntroProgress >= 1
         ? TEXT_READY_TIME +
           requestedProgress * (timelineDuration - TEXT_READY_TIME)
         : textIntroProgress > 0
@@ -320,7 +320,7 @@ export const createUmbrellaChapter = (
       renderProgress();
     },
     setProgress: (progress) => {
-      requestedProgress = clamp(progress);
+      requestedProgress = textIntroProgress >= 1 ? clamp(progress) : 0;
       renderProgress();
     },
     setTextIntroProgress: (progress) => {

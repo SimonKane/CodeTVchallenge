@@ -11,8 +11,10 @@ const REVEAL_TRIGGER_TIME = 0.72;
 const BASE_TIMELINE_DURATION = 4.32;
 const POST_REVEAL_SLOWDOWN = 1.15;
 const UMBRELLA_FADE_TIME = 2.68;
-const UMBRELLA_START_TIME = 3.05;
-const UMBRELLA_TEXT_INTRO_DURATION = 2.15;
+const UMBRELLA_ENTRANCE_END_TIME = 3.05;
+const UMBRELLA_TEXT_START_TIME = 3.62;
+const UMBRELLA_TEXT_INTRO_DURATION = 2.85;
+const SEQUENCE_RESET_HYSTERESIS = 0.03;
 
 const slowPostRevealTime = (time: number) =>
   REVEAL_TRIGGER_TIME +
@@ -188,6 +190,164 @@ const createScrollGovernor = (
     removeEventListener("keydown", handleKeydown);
     removeEventListener("touchmove", handleTouchMove);
     removeEventListener("scroll", handleScroll);
+  };
+};
+
+const createMobileStepGovernor = (
+  getBounds: () => ScrollBounds | undefined,
+  getLockedY: () => number | undefined,
+  getStepProgresses: () => number[],
+) => {
+  const scrollState = { y: scrollY };
+  let stepTween: gsap.core.Tween | undefined;
+  let touchStartY: number | undefined;
+  let touchCurrentY: number | undefined;
+  let touchStepTriggered = false;
+
+  const isInside = (bounds: ScrollBounds) =>
+    scrollY >= bounds.start - 1 && scrollY <= bounds.end + 1;
+
+  const moveOneStep = (direction: -1 | 1) => {
+    const lockedY = getLockedY();
+    if (lockedY !== undefined) {
+      scrollTo(0, lockedY);
+      return true;
+    }
+    if (stepTween?.isActive()) {
+      return true;
+    }
+
+    const bounds = getBounds();
+    if (!bounds || bounds.end <= bounds.start || !isInside(bounds)) {
+      return false;
+    }
+    const progress = Math.min(
+      1,
+      Math.max(0, (scrollY - bounds.start) / (bounds.end - bounds.start)),
+    );
+    const steps = getStepProgresses();
+    const targetProgress =
+      direction > 0
+        ? steps.find((step) => step > progress + 0.006)
+        : [...steps].reverse().find((step) => step < progress - 0.006);
+    if (targetProgress === undefined) {
+      return false;
+    }
+
+    const targetY = bounds.start + (bounds.end - bounds.start) * targetProgress;
+    const distance = Math.abs(targetProgress - progress);
+    scrollState.y = scrollY;
+    stepTween = gsap.to(scrollState, {
+      y: targetY,
+      duration: Math.min(2.7, Math.max(0.72, 0.45 + distance * 6.2)),
+      ease: "power1.inOut",
+      overwrite: true,
+      onUpdate: () => {
+        const activeLockY = getLockedY();
+        if (activeLockY !== undefined) {
+          stepTween?.kill();
+          stepTween = undefined;
+          scrollState.y = activeLockY;
+          scrollTo(0, activeLockY);
+          return;
+        }
+        scrollTo(0, scrollState.y);
+      },
+      onComplete: () => {
+        stepTween = undefined;
+      },
+    });
+    return true;
+  };
+
+  const handleWheel = (event: WheelEvent) => {
+    if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+    if (moveOneStep(event.deltaY < 0 ? -1 : 1)) event.preventDefault();
+  };
+
+  const handleKeydown = (event: KeyboardEvent) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement ||
+      event.target instanceof HTMLSelectElement ||
+      (event.target instanceof HTMLElement && event.target.isContentEditable)
+    ) {
+      return;
+    }
+    const forwardKeys = new Set(["ArrowDown", "PageDown", " ", "End"]);
+    const backwardKeys = new Set(["ArrowUp", "PageUp", "Home"]);
+    const direction = forwardKeys.has(event.key)
+      ? event.shiftKey && event.key === " "
+        ? -1
+        : 1
+      : backwardKeys.has(event.key)
+        ? -1
+        : undefined;
+    if (direction && moveOneStep(direction)) event.preventDefault();
+  };
+
+  const handleTouchStart = (event: TouchEvent) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    touchStartY = touch.clientY;
+    touchCurrentY = touch.clientY;
+    touchStepTriggered = false;
+  };
+
+  const handleTouchMove = (event: TouchEvent) => {
+    const bounds = getBounds();
+    if (!bounds || !isInside(bounds)) return;
+    const touch = event.touches[0];
+    if (touch) touchCurrentY = touch.clientY;
+    const delta =
+      touchStartY !== undefined && touchCurrentY !== undefined
+        ? touchStartY - touchCurrentY
+        : 0;
+    if (
+      getLockedY() === undefined &&
+      !stepTween?.isActive() &&
+      ((delta > 0 && scrollY >= bounds.end - 1) ||
+        (delta < 0 && scrollY <= bounds.start + 1))
+    ) {
+      return;
+    }
+    event.preventDefault();
+    if (!touchStepTriggered && Math.abs(delta) >= 18) {
+      touchStepTriggered = true;
+      moveOneStep(delta > 0 ? 1 : -1);
+    }
+  };
+
+  const handleTouchEnd = (event: TouchEvent) => {
+    touchStartY = undefined;
+    touchCurrentY = undefined;
+    if (touchStepTriggered) event.preventDefault();
+    touchStepTriggered = false;
+  };
+
+  const holdLockedPosition = () => {
+    const lockedY = getLockedY();
+    if (lockedY !== undefined && Math.abs(scrollY - lockedY) > 0.5) {
+      scrollTo(0, lockedY);
+    }
+  };
+
+  addEventListener("wheel", handleWheel, { passive: false });
+  addEventListener("keydown", handleKeydown);
+  addEventListener("touchstart", handleTouchStart, { passive: true });
+  addEventListener("touchmove", handleTouchMove, { passive: false });
+  addEventListener("touchend", handleTouchEnd, { passive: false });
+  addEventListener("scroll", holdLockedPosition, { passive: true });
+
+  return () => {
+    stepTween?.kill();
+    removeEventListener("wheel", handleWheel);
+    removeEventListener("keydown", handleKeydown);
+    removeEventListener("touchstart", handleTouchStart);
+    removeEventListener("touchmove", handleTouchMove);
+    removeEventListener("touchend", handleTouchEnd);
+    removeEventListener("scroll", holdLockedPosition);
   };
 };
 
@@ -383,6 +543,9 @@ export const createNarrativeTimeline = (
   };
 
   const createScroll = () => {
+    const discreteMobile = matchMedia(
+      "(max-width: 800px), (pointer: coarse)",
+    ).matches;
     syncChapterState(0);
     scrollTimeline = gsap.timeline({
       scrollTrigger: {
@@ -392,7 +555,7 @@ export const createNarrativeTimeline = (
           `+=${innerHeight * getScrollDistance(getNarrativeScrollDistance())}`,
         pin: true,
         pinSpacing: true,
-        scrub: matchMedia("(pointer: coarse)").matches ? 0.95 : 0.78,
+        scrub: discreteMobile ? true : 0.78,
         anticipatePin: 1,
         invalidateOnRefresh: true,
         onUpdate: (trigger) => {
@@ -400,13 +563,13 @@ export const createNarrativeTimeline = (
           if (!duration) return;
           const revealThreshold = REVEAL_TRIGGER_TIME / duration;
           const umbrellaThreshold =
-            slowPostRevealTime(UMBRELLA_START_TIME) / duration;
+            slowPostRevealTime(UMBRELLA_TEXT_START_TIME) / duration;
           if (trigger.progress >= revealThreshold && !textRevealStarted) {
             const lockY =
               trigger.start + (trigger.end - trigger.start) * revealThreshold;
             playTextReveal(lockY, revealThreshold);
           } else if (
-            trigger.progress < revealThreshold - 0.008 &&
+            trigger.progress < revealThreshold - SEQUENCE_RESET_HYSTERESIS &&
             textRevealComplete
           ) {
             resetTextReveal();
@@ -421,7 +584,8 @@ export const createNarrativeTimeline = (
               trigger.start + (trigger.end - trigger.start) * umbrellaThreshold;
             playUmbrellaTextIntro(lockY, umbrellaThreshold);
           } else if (
-            trigger.progress < umbrellaThreshold - 0.008 &&
+            trigger.progress <
+              umbrellaThreshold - SEQUENCE_RESET_HYSTERESIS &&
             umbrellaTextIntroComplete
           ) {
             resetUmbrellaTextIntro();
@@ -671,7 +835,7 @@ export const createNarrativeTimeline = (
           {
             progress: 1,
             duration: slowPostRevealDuration(
-              UMBRELLA_START_TIME - UMBRELLA_FADE_TIME,
+              UMBRELLA_ENTRANCE_END_TIME - UMBRELLA_FADE_TIME,
             ),
             ease: "power2.inOut",
             onUpdate: () =>
@@ -690,25 +854,43 @@ export const createNarrativeTimeline = (
             onUpdate: () =>
               umbrellaTransformation.setProgress(umbrellaState.progress),
           },
-          slowPostRevealTime(UMBRELLA_START_TIME),
+          slowPostRevealTime(UMBRELLA_TEXT_START_TIME),
         );
     }
 
-    destroyScrollGovernor = createScrollGovernor(
-      () => {
-        const trigger = scrollTimeline?.scrollTrigger;
-        return trigger ? { start: trigger.start, end: trigger.end } : undefined;
-      },
-      () => sequenceLockY,
-    );
-
-    scrollNormalizer = ScrollTrigger.normalizeScroll({
-      type: "touch",
-      allowNestedScroll: true,
-      lockAxis: true,
-      momentum: (observer) =>
-        Math.min(0.55, Math.max(0.18, Math.abs(observer.velocityY) / 3200)),
-    });
+    const getBounds = () => {
+      const trigger = scrollTimeline?.scrollTrigger;
+      return trigger ? { start: trigger.start, end: trigger.end } : undefined;
+    };
+    if (discreteMobile) {
+      destroyScrollGovernor = createMobileStepGovernor(
+        getBounds,
+        () => sequenceLockY,
+        () => {
+          const duration = scrollTimeline?.duration() ?? 1;
+          return [
+            0,
+            REVEAL_TRIGGER_TIME + 0.015,
+            slowPostRevealTime(1) + slowPostRevealDuration(1.34),
+            slowPostRevealTime(UMBRELLA_ENTRANCE_END_TIME),
+            slowPostRevealTime(UMBRELLA_TEXT_START_TIME) + 0.015,
+            duration,
+          ].map((time) => Math.min(1, Math.max(0, time / duration)));
+        },
+      );
+    } else {
+      destroyScrollGovernor = createScrollGovernor(
+        getBounds,
+        () => sequenceLockY,
+      );
+      scrollNormalizer = ScrollTrigger.normalizeScroll({
+        type: "touch",
+        allowNestedScroll: true,
+        lockAxis: true,
+        momentum: (observer) =>
+          Math.min(0.55, Math.max(0.18, Math.abs(observer.velocityY) / 3200)),
+      });
+    }
 
     refreshFrame = requestAnimationFrame(() => {
       refreshFrame = undefined;
