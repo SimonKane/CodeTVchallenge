@@ -5,6 +5,9 @@ import streetImage from "../Hero/assets/street.png";
 import childLookbackImage from "./assets/child-lookback.png";
 import hushImage from "./assets/schh.png";
 import depthImage from "./assets/street-depth.png";
+import closedUmbrellaImage from "./assets/closed-umbrella.png";
+import openUmbrellaImage from "./assets/open-umbrella.png";
+import withoutHoodImage from "./assets/whitout-hood.png";
 import "./Experience.css";
 
 const hiddenMessage = "tystnad";
@@ -136,6 +139,82 @@ const hiddenMessage = "tystnad";
       >
     </p>
   </div>
+
+<div
+  class="umbrella-chapter"
+  data-umbrella-chapter
+  role="region"
+  aria-labelledby="umbrella-safe-title"
+>
+  <div class="umbrella-chapter__stage" data-umbrella-stage>
+    <div class="umbrella-chapter__media" aria-hidden="true">
+      <img
+        class="umbrella-chapter__image umbrella-chapter__image--closed"
+        data-umbrella-closed
+        src={closedUmbrellaImage.src}
+        alt=""
+      />
+      <img
+        class="umbrella-chapter__sheltered-child"
+        data-umbrella-sheltered-child
+        src={withoutHoodImage.src}
+        alt=""
+      />
+      <img
+        class="umbrella-chapter__image umbrella-chapter__image--open"
+        data-umbrella-open
+        src={openUmbrellaImage.src}
+        alt=""
+      />
+      <canvas
+        class="umbrella-chapter__canopy-rain"
+        data-umbrella-canopy-rain
+        aria-hidden="true"
+      ></canvas>
+    </div>
+
+    <div
+      class="umbrella-chapter__problem"
+      data-umbrella-problem
+      aria-label="Idag utsätts 1 av 3 barn i Sverige någon gång för sexuellt våld. Paraply arbetar för att minska dessa förödande siffror, men för att skapa förändring behöver vi tillsammans våga se problemet och aktivt ta ställning emot det. Vi vågar, vågar du?"
+    >
+      <p class="umbrella-chapter__stat" data-umbrella-rain-text>
+        Idag utsätts <strong>1 av 3 barn</strong> i Sverige någon gång för
+        sexuellt våld.
+      </p>
+      <p class="umbrella-chapter__action" data-umbrella-rain-text>
+        Paraply arbetar för att minska dessa förödande siffror, men för att
+        skapa förändring behöver vi <strong>tillsammans</strong> våga se
+        problemet och <strong>aktivt</strong> ta ställning emot det.
+      </p>
+      <p class="umbrella-chapter__challenge" data-umbrella-rain-text>
+        Vi vågar, vågar du?
+      </p>
+    </div>
+
+    <div class="umbrella-chapter__shelter-glow" data-umbrella-glow aria-hidden="true">
+    </div>
+    <div class="umbrella-chapter__safe-copy" data-umbrella-safe>
+      <h2 id="umbrella-safe-title">Välkommen till en trygg plats!</h2>
+      <p>
+        Vi på Paraply förstår att ett övergrepp kan leda till en mängd olika
+        känslor, tankar och reaktioner hos dig som blivit utsatt. Därför finns
+        vi här för dig som behöver någon att prata med.
+      </p>
+      <p>
+        Hos oss kan du vara anonym, vi tar din integritet på största allvar och
+        alla våra samtal och chattar är konfidentiella.
+      </p>
+      <p class="umbrella-chapter__safe-final">Vi finns här för dig.</p>
+    </div>
+
+    <div
+      class="umbrella-chapter__exposure"
+      data-umbrella-exposure
+      aria-hidden="true"
+    ></div>
+  </div>
+</div>
 </section>
 
 <script>

@@ -2,6 +2,7 @@ import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type { ExperienceScene } from "../webgl/ExperienceScene";
 import { createEditorialTransformation } from "./EditorialTransformation";
+import { createUmbrellaChapter } from "./UmbrellaChapter";
 import { createWaterTextReveal } from "./WaterTextReveal";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -49,6 +50,7 @@ export const createNarrativeTimeline = (
   const narrative = { progress: 0, lightning: 0.12 };
   const editorialState = { progress: 0 };
   const editorialPlayback = { progress: 0 };
+  const umbrellaState = { progress: 0 };
   const textRevealState = { progress: 0 };
   const rainState = { visibility: 1 };
   let scrollTimeline: gsap.core.Timeline | undefined;
@@ -69,6 +71,17 @@ export const createNarrativeTimeline = (
     copy: chapterCopy,
     currentImage: chapterChild,
   });
+  const umbrellaChapter = chapter.querySelector<HTMLElement>(
+    "[data-umbrella-chapter]",
+  );
+  const umbrellaTransformation = umbrellaChapter
+    ? createUmbrellaChapter(umbrellaChapter)
+    : { setProgress: () => undefined, destroy: () => undefined };
+  const editorialFinalElements = [
+    ...chapter.querySelectorAll<HTMLElement>(
+      "[data-editorial-final-image], [data-editorial-hidden-message]",
+    ),
+  ];
   const transitionBoltPaths = [
     ...transitionFlash.querySelectorAll<SVGPathElement>("path"),
   ];
@@ -157,7 +170,7 @@ export const createNarrativeTimeline = (
       scrollTrigger: {
         trigger: root,
         start: "top top",
-        end: () => `+=${innerHeight * 7.2}`,
+        end: () => `+=${innerHeight * 12.2}`,
         pin: true,
         pinSpacing: true,
         scrub: 0.85,
@@ -385,6 +398,30 @@ export const createNarrativeTimeline = (
         1,
       );
 
+    if (umbrellaChapter) {
+      scrollTimeline
+        .to(
+          editorialFinalElements,
+          {
+            opacity: 0,
+            duration: 0.28,
+            ease: "power2.inOut",
+          },
+          2.5,
+        )
+        .to(
+          umbrellaState,
+          {
+            progress: 1,
+            duration: 2.2,
+            ease: "none",
+            onUpdate: () =>
+              umbrellaTransformation.setProgress(umbrellaState.progress),
+          },
+          2.5,
+        );
+    }
+
     refreshFrame = requestAnimationFrame(() => {
       refreshFrame = undefined;
       ScrollTrigger.refresh();
@@ -454,11 +491,13 @@ export const createNarrativeTimeline = (
       chapter.style.removeProperty("--chapter-cover");
       waterReveal.destroy();
       editorialTransformation.destroy();
+      umbrellaTransformation.destroy();
       gsap.killTweensOf([
         introState,
         narrative,
         editorialState,
         editorialPlayback,
+        umbrellaState,
         textRevealState,
         rainState,
         copy,
@@ -472,6 +511,7 @@ export const createNarrativeTimeline = (
         chapterLines,
         chapterBody,
         chapterChild,
+        editorialFinalElements,
       ]);
     },
   };

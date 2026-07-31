@@ -170,14 +170,17 @@ const initializeExperience = async (root: HTMLElement) => {
   }
 };
 
-const initializeExperiences = () => {
-  document
-    .querySelectorAll<HTMLElement>("[data-cinematic-scene]")
-    .forEach((root) => void initializeExperience(root));
-};
-
 const destroyExperiences = () => [...instances.keys()].forEach(destroyExperience);
 
-initializeExperiences();
-document.addEventListener("astro:page-load", initializeExperiences);
-document.addEventListener("astro:before-swap", destroyExperiences);
+const initializeExperiences = async () => {
+  const roots = [
+    ...document.querySelectorAll<HTMLElement>("[data-cinematic-scene]"),
+  ];
+  await Promise.all(roots.map(initializeExperience));
+};
+
+void initializeExperiences();
+document.addEventListener("astro:page-load", () => void initializeExperiences());
+document.addEventListener("astro:before-swap", () => {
+  destroyExperiences();
+});
