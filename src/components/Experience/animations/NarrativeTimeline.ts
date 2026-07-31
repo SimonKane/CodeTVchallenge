@@ -644,7 +644,7 @@ export const createNarrativeTimeline = (
       ease: "power3.out",
       onUpdate: renderIntro,
     })
-    .set(introState, { environment: 0, onUpdate: renderIntro })
+    .set(introState, { environment: 0.16, onUpdate: renderIntro })
     .set(introState, { environment: 1, child: 1, onUpdate: renderIntro }, 2.45)
     .to(
       introState,

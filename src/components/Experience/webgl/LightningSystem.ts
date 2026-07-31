@@ -35,9 +35,9 @@ export class LightningSystem {
       lamp,
       warmLight,
     } = this.targets;
-    renderer.toneMappingExposure = 0.76 + this.value * 0.82;
-    ambient.intensity = 0.09 + this.value * 0.72;
-    directional.intensity = 0.18 + this.value * 3.7;
+    renderer.toneMappingExposure = 0.82 + this.value * 0.8;
+    ambient.intensity = 0.14 + this.value * 0.7;
+    directional.intensity = 0.24 + this.value * 3.64;
     lamp.intensity = 8 + this.value * 16;
     warmLight.intensity = warmth * 4.5;
     this.targets.fog.setLightning(this.value);

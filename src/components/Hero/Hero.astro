@@ -1,7 +1,7 @@
 ---
 import './Hero.css';
-import streetImage from './assets/street.webp';
-import childImage from './assets/child.webp';
+import streetImage from './assets/street.png';
+import childImage from './assets/child.png';
 ---
 
 <section class="hero" aria-labelledby="hero-title">
@@ -11,9 +11,6 @@ import childImage from './assets/child.webp';
 			src={streetImage.src}
 			alt=""
 			aria-hidden="true"
-			loading="lazy"
-			decoding="async"
-			fetchpriority="low"
 		/>
 
 		<div class="hero-child-positioner">
@@ -23,9 +20,6 @@ import childImage from './assets/child.webp';
 					src={childImage.src}
 					alt=""
 					aria-hidden="true"
-					loading="lazy"
-					decoding="async"
-					fetchpriority="low"
 				/>
 			</div>
 		</div>

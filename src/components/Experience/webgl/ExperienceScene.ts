@@ -85,10 +85,14 @@ const environmentFragment = `
     float depth=texture2D(uDepth,uv).r;
     vec2 drift=vec2((depth-.4)*approach*.018, sin(uv.y*10.)*approach*.0025);
     vec3 color=texture2D(uStreet,uv+drift).rgb;
-    color*=1.08 + uLightning*.98;
-    color+=vec3(.08,.17,.24)*depth*(.11+approach*.1);
+    color*=1.13 + uLightning*.98;
+    float corridor=(1.-smoothstep(.08,.48,abs(vUv.x-.53))) *
+      smoothstep(.08,.82,vUv.y) * (1.-smoothstep(.82,1.,vUv.y));
+    float horizonGlow=(1.-smoothstep(.12,.5,length((vUv-vec2(.54,.48))*vec2(1.45,.72))));
+    color+=vec3(.08,.17,.24)*depth*(.16+approach*.16);
+    color+=vec3(.035,.085,.12)*(corridor*.34+horizonGlow*.24)*(1.+approach*.45);
     float edge=smoothstep(.34,.78,length(vUv-.5)*1.5);
-    color*=1.-edge*uClose*.46;
+    color*=1.-edge*uClose*.3;
     float streak=sin((vUv.x*1.35+vUv.y)*52.+depth*14.)*.5+.5;
     float editorialMask=smoothstep(.08,.92,uEditorial+streak*.14-vUv.y*.08);
     vec3 editorial=vec3(.035,.026,.023)+vec3(.018,.01,.006)*(1.-vUv.y);

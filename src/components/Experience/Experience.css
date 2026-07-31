@@ -202,9 +202,9 @@
   position: absolute;
   z-index: 1;
   bottom: -6%;
-  left: -2vw;
-  width: 48vw;
-  height: 92svh;
+  left: -1vw;
+  width: 50vw;
+  height: 94svh;
   overflow: hidden;
   pointer-events: none;
   -webkit-mask-image: radial-gradient(
@@ -239,9 +239,9 @@
 
 .experience-chapter-copy {
   position: relative;
-  z-index: 1;
-  width: min(50vw, 47rem);
-  margin-right: clamp(1rem, 6vw, 7rem);
+  z-index: 2;
+  width: min(53vw, 55rem);
+  margin-right: clamp(0rem, 3vw, 3.5rem);
   margin-left: auto;
 }
 
@@ -622,9 +622,9 @@
 }
 
 .experience-chapter h2 {
-  max-width: 10ch;
+  max-width: 9.5ch;
   font-family: var(--font-display);
-  font-size: clamp(3.4rem, 8.6vw, 8.5rem);
+  font-size: clamp(4.2rem, 9.4vw, 9.8rem);
   font-weight: 400;
   line-height: 0.92;
   letter-spacing: -0.055em;
@@ -641,12 +641,12 @@
 }
 
 .experience-chapter-body {
-  max-width: 42rem;
-  margin-top: clamp(2rem, 5vh, 4rem);
-  margin-left: clamp(0rem, 7vw, 7rem);
-  font-size: clamp(1.05rem, 1.45vw, 1.35rem);
-  line-height: 1.65;
-  color: rgba(247, 248, 246, 0.68);
+  max-width: 45rem;
+  margin-top: clamp(2.2rem, 5.5vh, 4.5rem);
+  margin-left: clamp(0rem, 4vw, 4.5rem);
+  font-size: clamp(1.15rem, 1.62vw, 1.52rem);
+  line-height: 1.58;
+  color: rgba(247, 248, 246, 0.76);
 }
 
 .experience-chapter-body > span {
@@ -678,11 +678,11 @@
   }
 
   .experience-chapter-child {
-    bottom: -2rem;
-    left: -18vw;
-    width: 78vw;
-    height: 66svh;
-    opacity: 0.7;
+    bottom: -1.5rem;
+    left: -22vw;
+    width: 86vw;
+    height: 70svh;
+    opacity: 0.76;
   }
 
   .experience-chapter-child::after {
@@ -691,15 +691,19 @@
 
   .experience-chapter-copy {
     width: 100%;
+    margin-right: 0;
   }
 
   .experience-chapter h2 {
-    font-size: clamp(3.3rem, 16vw, 5.6rem);
+    font-size: clamp(3.65rem, 17vw, 6rem);
   }
 
   .experience-chapter-body {
     margin-left: 0;
     max-width: 31rem;
+    margin-top: clamp(1.6rem, 4vh, 2.5rem);
+    font-size: clamp(1.02rem, 4.45vw, 1.2rem);
+    line-height: 1.52;
   }
 
   .editorial-hidden-message {

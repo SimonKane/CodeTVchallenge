@@ -39,13 +39,13 @@ const vertexShader = `
 
     float nearFactor=1.-smoothstep(1.1,15.,-mv.z);
     float travelEnergy=uTravel*(.5+.5*aLayer);
-    float pointSize=clamp(aSize*(560./max(.2,-mv.z))*(1.+travelEnergy*1.85+uRush*.28),2.1,66.);
+    float pointSize=clamp(aSize*(580./max(.2,-mv.z))*(1.+travelEnergy*2.05+uRush*.36),2.2,70.);
     gl_PointSize=pointSize;
     vPointSize=pointSize;
 
-    vFlow=vec2(0.,-1.);
-    vStretch=clamp(.5+aLayer*.16+nearFactor*(.2+uTravel*.18),.48,.96);
-    vAlpha=aAlpha*uIntensity*(.76+nearFactor*.48+uLightning*1.65+uRush*.16);
+    vFlow=normalize(vec2(.09+nearFactor*.035,-1.));
+    vStretch=clamp(.56+aLayer*.17+nearFactor*(.22+uTravel*.2),.52,.98);
+    vAlpha=aAlpha*uIntensity*(.82+nearFactor*.56+uLightning*1.65+uRush*.22);
     float faceMask=smoothstep(1.18,.18,distance(p.xy,vec2(uWarmCenter,.62)));
     vAlpha*=1.-faceMask*uFaceClear*.9;
     vWarmth=uWarmth*smoothstep(3.,.15,abs(p.x-uWarmCenter))*smoothstep(3.2,.1,abs(p.y+.2));
@@ -138,12 +138,12 @@ export class RainSystem {
 
   setProgress(progress: number) {
     const progressDelta = Math.max(-0.045, Math.min(0.045, progress - this.progress));
-    this.scrollShift += progressDelta * 18;
+    this.scrollShift += progressDelta * 22;
     this.rush = Math.min(1.4, this.rush + Math.abs(progressDelta) * 42);
     this.progress = progress;
     const travel = 1 - this.range(0.26, 0.38, progress);
-    this.material.uniforms.uTravel.value = 0.38 + travel * 0.62;
-    this.intensity = 1.02 + this.range(0.06, 0.58, progress) * 0.58;
+    this.material.uniforms.uTravel.value = 0.46 + travel * 0.68;
+    this.intensity = 1.08 + this.range(0.06, 0.58, progress) * 0.58;
     this.material.uniforms.uIntensity.value = this.intensity * this.visibility;
   }
 
@@ -180,7 +180,7 @@ export class RainSystem {
     const cameraDelta = this.cameraZ - cameraZ;
     this.cameraZ = cameraZ;
     const travel = 1 - this.range(0.26, 0.38, this.progress);
-    const wind = Math.sin(elapsed * 0.34) * 0.2 + 0.24;
+    const wind = Math.sin(elapsed * 0.34) * 0.22 + 0.3;
 
     for (let i = 0; i < this.activeCount; i += 1) {
       const offset = i * 3;
@@ -189,7 +189,7 @@ export class RainSystem {
       this.positions[offset + 1] -= this.speeds[i] * delta * (0.82 + near * 0.62);
       this.positions[offset] += wind * delta * (0.7 + near * 0.45);
       this.positions[offset + 2] +=
-        delta * (1.5 + this.speeds[i] * 0.18) * travel + this.scrollShift;
+        delta * (1.72 + this.speeds[i] * 0.21) * travel + this.scrollShift;
 
       if (
         this.positions[offset + 2] > cameraZ - NEAR_DEPTH ||
