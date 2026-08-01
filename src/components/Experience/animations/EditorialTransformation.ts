@@ -2,6 +2,19 @@ import { gsap } from "gsap";
 import { createLightningCanvas } from "./LightningCanvas";
 
 const HIDDEN_MESSAGE = "silence";
+const LIGHTNING_START_TIME = 2.82;
+const LIGHTNING_SCROLL_STRETCH = 2.25;
+const HIGHLIGHT_READY_TIME = 0.44;
+const FIRST_FLIGHT_TIME = 0.46;
+const SECOND_FLIGHT_TIME = 0.84;
+const BRIGHT_HIGHLIGHT_TIME = 1.23;
+const RAIN_AWAY_TIME = 1.46;
+const MESSAGE_ASSEMBLY_TIME = 2.09;
+const stretchLightningTime = (time: number) =>
+  LIGHTNING_START_TIME +
+  (time - LIGHTNING_START_TIME) * LIGHTNING_SCROLL_STRETCH;
+const stretchLightningDuration = (duration: number) =>
+  duration * LIGHTNING_SCROLL_STRETCH;
 
 const EDITORIAL_DEBUG = {
   enabled: false,
@@ -30,17 +43,52 @@ interface LeafFlight {
   midRotation: number;
 }
 
-interface MobileWashedGlyph {
+interface WashedGlyph {
   character: string;
   x: number;
   y: number;
+  centerY: number;
+  baselineOffset: number;
+  targetX: number;
+  targetY: number;
+  midTargetX: number;
+  midTargetY: number;
+  rainTargetX: number;
+  rainTargetY: number;
+  midRotation: number;
+  rotation: number;
+  rainRotation: number;
+  scale: number;
+  fontSize: number;
   font: string;
   color: string;
-  sourceIndex: number;
+  spriteKey: string;
+  trailKey: number;
+}
+
+interface GlyphSprite {
+  normal: CanvasImageSource;
+  washed: CanvasImageSource;
+  width: number;
+  height: number;
+  originX: number;
+  baseline: number;
+}
+
+interface TrailSprite {
+  trail: CanvasImageSource;
+  drop: CanvasImageSource;
+  trailWidth: number;
+  trailHeight: number;
+  dropWidth: number;
+  dropHeight: number;
 }
 
 export interface EditorialTransformationController {
-  setProgress: (progress: number) => void;
+  getLightningTriggerProgress: () => number;
+  setHighlightProgress: (progress: number) => void;
+  setLightningSequenceProgress: (progress: number) => void;
+  setProgress: (progress: number, lightningComplete?: boolean) => void;
   destroy: () => void;
 }
 
@@ -153,8 +201,8 @@ export const createEditorialTransformation = ({
   const selectedSet = new Set(selectedLetters);
   const washedLetters = sourceLetters.filter((letter) => !selectedSet.has(letter));
   const mobile = matchMedia("(max-width: 800px), (pointer: coarse)").matches;
-  const mobileWashedCanvas = mobile ? document.createElement("canvas") : undefined;
-  const mobileWashedContext = mobileWashedCanvas?.getContext("2d", {
+  const washedCanvas = document.createElement("canvas");
+  const washedContext = washedCanvas.getContext("2d", {
     alpha: true,
   });
   let timeline: gsap.core.Timeline | undefined;
@@ -162,8 +210,122 @@ export const createEditorialTransformation = ({
   let preparationHandle: number | undefined;
   const flightOrigins: Array<{ x: number; y: number; scale: number }> = [];
   const leafFlights: LeafFlight[] = [];
-  const mobileWashedGlyphs: MobileWashedGlyph[] = [];
-  let mobileWashedActive = false;
+  const washedGlyphs: WashedGlyph[] = [];
+  const glyphSprites = new Map<string, GlyphSprite>();
+  const trailSprites = new Map<number, TrailSprite>();
+  let washedActive = false;
+  let washedWidth = 1;
+  let washedHeight = 1;
+  let washedPixelRatio = 1;
+  let lastRenderedTime = -1;
+
+  const createSpriteSurface = (width: number, height: number) => {
+    const pixelWidth = Math.max(1, Math.ceil(width * washedPixelRatio));
+    const pixelHeight = Math.max(1, Math.ceil(height * washedPixelRatio));
+    const canvas: HTMLCanvasElement | OffscreenCanvas =
+      typeof OffscreenCanvas === "undefined"
+        ? document.createElement("canvas")
+        : new OffscreenCanvas(pixelWidth, pixelHeight);
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+    const context = canvas.getContext("2d", { alpha: true }) as
+      | CanvasRenderingContext2D
+      | OffscreenCanvasRenderingContext2D
+      | null;
+    context?.setTransform(washedPixelRatio, 0, 0, washedPixelRatio, 0, 0);
+    return { canvas, context };
+  };
+
+  const prepareGlyphSprite = (glyph: WashedGlyph) => {
+    if (glyphSprites.has(glyph.spriteKey) || !washedContext) return;
+    washedContext.font = glyph.font;
+    const metrics = washedContext.measureText(glyph.character);
+    const visibleWidth = Math.max(
+      metrics.width,
+      metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight,
+    );
+    const padding = glyph.fontSize * 1.25 + 4;
+    const width = Math.ceil(visibleWidth + padding * 2);
+    const height = Math.ceil(glyph.fontSize * 3.2 + padding * 2);
+    const originX = width * 0.5;
+    const baseline = padding + glyph.fontSize * 1.35;
+    const normal = createSpriteSurface(width, height);
+    const washed = createSpriteSurface(width, height);
+
+    [normal, washed].forEach(({ context }) => {
+      if (!context) return;
+      context.font = glyph.font;
+      context.textAlign = "center";
+      context.textBaseline = "alphabetic";
+      context.fillStyle = glyph.color;
+    });
+    normal.context?.fillText(glyph.character, originX, baseline);
+    if (washed.context) {
+      washed.context.shadowColor = "rgba(190,218,229,.3)";
+      washed.context.shadowBlur = glyph.fontSize * 0.18;
+      washed.context.shadowOffsetY = glyph.fontSize * 0.55;
+      washed.context.filter = "blur(1.5px)";
+      washed.context.fillText(glyph.character, originX, baseline);
+    }
+    glyphSprites.set(glyph.spriteKey, {
+      normal: normal.canvas,
+      washed: washed.canvas,
+      width,
+      height,
+      originX,
+      baseline,
+    });
+  };
+
+  const prepareTrailSprite = (fontSize: number) => {
+    const key = Math.round(fontSize * 10);
+    if (trailSprites.has(key)) return;
+    const trailWidth = Math.max(4, fontSize * 0.16);
+    const trailHeight = Math.max(1, fontSize * 5.2);
+    const dropWidth = Math.max(8, fontSize * 0.9);
+    const dropHeight = Math.max(8, fontSize * 1.4);
+    const trail = createSpriteSurface(trailWidth, trailHeight);
+    const drop = createSpriteSurface(dropWidth, dropHeight);
+    if (trail.context) {
+      const gradient = trail.context.createLinearGradient(0, 0, 0, trailHeight);
+      gradient.addColorStop(0, "rgba(229,243,248,.72)");
+      gradient.addColorStop(0.42, "rgba(145,181,196,.2)");
+      gradient.addColorStop(1, "rgba(145,181,196,0)");
+      trail.context.strokeStyle = gradient;
+      trail.context.lineWidth = 1;
+      trail.context.beginPath();
+      trail.context.moveTo(trailWidth * 0.5, 0);
+      trail.context.lineTo(trailWidth * 0.5, trailHeight);
+      trail.context.stroke();
+    }
+    if (drop.context) {
+      const gradient = drop.context.createLinearGradient(
+        0,
+        dropHeight * 0.25,
+        0,
+        dropHeight * 0.75,
+      );
+      gradient.addColorStop(0, "rgba(235,247,250,.86)");
+      gradient.addColorStop(1, "rgba(157,194,208,.18)");
+      drop.context.fillStyle = gradient;
+      drop.context.shadowColor = "rgba(185,216,228,.32)";
+      drop.context.shadowBlur = fontSize * 0.35;
+      drop.context.fillRect(
+        dropWidth * 0.5 - 1,
+        dropHeight * 0.25,
+        2,
+        fontSize * 0.7,
+      );
+    }
+    trailSprites.set(key, {
+      trail: trail.canvas,
+      drop: drop.canvas,
+      trailWidth,
+      trailHeight,
+      dropWidth,
+      dropHeight,
+    });
+  };
 
   if (
     !finalMessage ||
@@ -173,15 +335,19 @@ export const createEditorialTransformation = ({
     !exposure ||
     selectedLetters.length !== [...HIDDEN_MESSAGE].length
   ) {
-    return { setProgress: () => undefined, destroy: () => undefined };
+    return {
+      getLightningTriggerProgress: () => 1,
+      setHighlightProgress: () => undefined,
+      setLightningSequenceProgress: () => undefined,
+      setProgress: () => undefined,
+      destroy: () => undefined,
+    };
   }
   const lightningCanvas = createLightningCanvas(lightning);
   const lightningState = { progress: 0 };
-  if (mobileWashedCanvas) {
-    mobileWashedCanvas.className = "editorial-washed-canvas";
-    mobileWashedCanvas.setAttribute("aria-hidden", "true");
-    chapter.append(mobileWashedCanvas);
-  }
+  washedCanvas.className = "editorial-washed-canvas";
+  washedCanvas.setAttribute("aria-hidden", "true");
+  chapter.append(washedCanvas);
 
   selectedLetters.forEach((letter) =>
     letter.classList.add("editorial-source-letter--selected"),
@@ -242,25 +408,79 @@ export const createEditorialTransformation = ({
       );
     });
 
-    if (mobileWashedCanvas && mobileWashedContext) {
-      mobileWashedCanvas.width = Math.max(1, Math.round(viewportWidth));
-      mobileWashedCanvas.height = Math.max(1, Math.round(viewportHeight));
-      mobileWashedContext.textAlign = "center";
-      mobileWashedContext.textBaseline = "alphabetic";
-      mobileWashedGlyphs.length = 0;
+    if (washedContext) {
+      washedPixelRatio = mobile ? 1 : Math.min(devicePixelRatio || 1, 2);
+      washedWidth = viewportWidth;
+      washedHeight = viewportHeight;
+      washedCanvas.width = Math.max(1, Math.round(viewportWidth * washedPixelRatio));
+      washedCanvas.height = Math.max(1, Math.round(viewportHeight * washedPixelRatio));
+      washedCanvas.style.width = `${viewportWidth}px`;
+      washedCanvas.style.height = `${viewportHeight}px`;
+      washedContext.setTransform(washedPixelRatio, 0, 0, washedPixelRatio, 0, 0);
+      washedContext.textAlign = "center";
+      washedContext.textBaseline = "alphabetic";
+      washedGlyphs.length = 0;
       washedLetters.forEach((letter) => {
         const sourceIndex = sourceLetters.indexOf(letter);
         const bounds = sourceBounds[sourceIndex];
         const style = getComputedStyle(letter);
-        mobileWashedGlyphs.push({
-          character: letter.textContent ?? "",
-          x: bounds.left - chapterBounds.left + bounds.width * 0.5,
-          y: bounds.top - chapterBounds.top + bounds.height * 0.82,
-          font: `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`,
+        const x = bounds.left - chapterBounds.left + bounds.width * 0.5;
+        const y = bounds.top - chapterBounds.top + bounds.height * 0.82;
+        const centerY = bounds.top - chapterBounds.top + bounds.height * 0.5;
+        const flight = leafFlights[sourceIndex];
+        const fontSize = Number.parseFloat(style.fontSize);
+        const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        const character = letter.textContent ?? "";
+        const seed = hash((sourceIndex + 1) * 91.713);
+        const targetX =
+          viewportWidth *
+          (0.045 + fract(sourceIndex * 0.61803398875 + seed * 0.11) * 0.91);
+        const targetY =
+          viewportHeight *
+          (0.09 + fract(sourceIndex * 0.75487766625 + seed * 0.13) * 0.82);
+        const direction = sourceIndex % 2 === 0 ? -1 : 1;
+        const midTargetX = clamp(
+          viewportWidth * 0.035,
+          viewportWidth * 0.965,
+          lerp(x, targetX, 0.42) + direction * viewportWidth * 0.1,
+        );
+        const midTargetY = clamp(
+          viewportHeight * 0.075,
+          viewportHeight * 0.925,
+          lerp(y, targetY, 0.28) - viewportHeight * 0.07,
+        );
+        const drift =
+          ((sourceIndex % 7) - 3) * 18 + direction * viewportWidth * 0.025;
+        washedGlyphs.push({
+          character,
+          x,
+          y,
+          centerY,
+          baselineOffset: y - centerY,
+          targetX,
+          targetY,
+          midTargetX,
+          midTargetY,
+          rainTargetX: targetX + drift,
+          rainTargetY: targetY + viewportHeight * 1.12,
+          midRotation: flight.midRotation,
+          rotation: flight.rotation,
+          rainRotation:
+            flight.rotation + direction * (150 + (sourceIndex % 5) * 38),
+          scale: flight.scale,
+          fontSize,
+          font,
           color: style.color,
-          sourceIndex,
+          spriteKey: `${font}|${style.color}|${character}`,
+          trailKey: Math.round(fontSize * 10),
         });
       });
+      if (!mobile) {
+        washedGlyphs.forEach((glyph) => {
+          prepareGlyphSprite(glyph);
+          prepareTrailSprite(glyph.fontSize);
+        });
+      }
     }
 
     targetLetters.forEach((target, index) => {
@@ -302,14 +522,14 @@ export const createEditorialTransformation = ({
           color: "#8f151a",
           "--selected-shadow":
             "0 0 0.08em rgba(194,40,47,.62), 0 0 .42em rgba(53,6,9,.52)",
-          duration: 0.24,
-          stagger: 0.008,
-          ease: "power2.inOut",
+          duration: 0.1,
+          stagger: 0.004,
+          ease: "power2.out",
         },
-        0.12,
+        0.02,
       )
       .to(
-        mobile ? selectedLetters : sourceLetters,
+        selectedLetters,
         {
           "--leaf-x": (index: number, target: HTMLElement) => {
             const sourceIndex = sourceLetters.indexOf(target);
@@ -331,10 +551,10 @@ export const createEditorialTransformation = ({
           stagger: { each: 0.0012, from: "random" },
           ease: "power2.out",
         },
-        0.28,
+        FIRST_FLIGHT_TIME,
       )
       .to(
-        mobile ? selectedLetters : sourceLetters,
+        selectedLetters,
         {
           "--leaf-x": (index: number, target: HTMLElement) => {
             const sourceIndex = sourceLetters.indexOf(target);
@@ -356,7 +576,7 @@ export const createEditorialTransformation = ({
           stagger: { each: 0.0015, from: "random" },
           ease: "sine.inOut",
         },
-        0.66,
+        SECOND_FLIGHT_TIME,
       )
       .to(
         selectedLetters,
@@ -368,10 +588,10 @@ export const createEditorialTransformation = ({
           stagger: 0.012,
           ease: "power2.inOut",
         },
-        1.05,
+        BRIGHT_HIGHLIGHT_TIME,
       )
       .to(
-        mobile ? [] : washedLetters,
+        [],
         {
           "--leaf-x": (index: number, target: HTMLElement) => {
             const sourceIndex = sourceLetters.indexOf(target);
@@ -404,60 +624,101 @@ export const createEditorialTransformation = ({
           stagger: { each: 0.0011, from: "random" },
           ease: "power2.in",
         },
-        1.28,
+        RAIN_AWAY_TIME,
       )
-      .to(lightning, { opacity: 1, duration: 0.016 }, 2.82)
+      .to(
+        lightning,
+        { opacity: 1, duration: stretchLightningDuration(0.016) },
+        LIGHTNING_START_TIME,
+      )
       .to(
         lightningState,
         {
           progress: 1,
-          duration: 0.32,
+          duration: stretchLightningDuration(0.32),
           ease: "none",
           onUpdate: () => lightningCanvas.setProgress(lightningState.progress),
         },
-        2.82,
+        LIGHTNING_START_TIME,
       )
-      .to(exposure, { opacity: 0.86, duration: 0.018 }, 2.845)
-      .to(exposure, { opacity: 0.14, duration: 0.1 }, 2.863)
-      .to(exposure, { opacity: 0.62, duration: 0.018 }, 2.963)
-      .to(exposure, { opacity: 0, duration: 0.14 }, 2.981)
+      .to(
+        exposure,
+        { opacity: 0.86, duration: stretchLightningDuration(0.018) },
+        stretchLightningTime(2.845),
+      )
+      .to(
+        exposure,
+        { opacity: 0.14, duration: stretchLightningDuration(0.1) },
+        stretchLightningTime(2.863),
+      )
+      .to(
+        exposure,
+        { opacity: 0.62, duration: stretchLightningDuration(0.018) },
+        stretchLightningTime(2.963),
+      )
+      .to(
+        exposure,
+        { opacity: 0, duration: stretchLightningDuration(0.14) },
+        stretchLightningTime(2.981),
+      )
       .to(
         finalImage,
         {
           opacity: 1,
           clipPath: mobile ? "none" : "inset(0% 0% 0% 0%)",
-          duration: 0.25,
+          duration: stretchLightningDuration(0.25),
           ease: "power2.inOut",
         },
-        2.84,
+        stretchLightningTime(2.84),
       )
       .to(
         currentImage,
         {
           opacity: 0,
           x: "-8vw",
-          duration: 0.22,
+          duration: stretchLightningDuration(0.22),
           ease: "power2.inOut",
         },
-        2.88,
+        stretchLightningTime(2.88),
       )
-      .to(copy, { opacity: 0, duration: 0.18, ease: "power2.out" }, 2.88)
-      .to(lightning, { opacity: 0, duration: 0.14, ease: "power2.out" }, 3.04)
+      .to(
+        copy,
+        {
+          opacity: 0,
+          duration: stretchLightningDuration(0.18),
+          ease: "power2.out",
+        },
+        stretchLightningTime(2.88),
+      )
+      .to(
+        lightning,
+        {
+          opacity: 0,
+          duration: stretchLightningDuration(0.14),
+          ease: "power2.out",
+        },
+        stretchLightningTime(3.04),
+      )
       .to(
         finalImage,
         {
           x: 0,
           filter: "brightness(.86) saturate(.7) contrast(1.1)",
-          duration: 0.22,
+          duration: stretchLightningDuration(0.22),
           ease: "power3.out",
         },
-        2.9,
+        stretchLightningTime(2.9),
       )
       .fromTo(
         finalMessage.querySelector("p"),
         { opacity: 0, y: 14 },
-        { opacity: 1, y: 0, duration: 0.12, ease: "power2.out" },
-        3.12,
+        {
+          opacity: 1,
+          y: 0,
+          duration: stretchLightningDuration(0.12),
+          ease: "power2.out",
+        },
+        stretchLightningTime(3.12),
       );
 
     targetLetters.forEach((target, index) => {
@@ -474,12 +735,12 @@ export const createEditorialTransformation = ({
           rotation: flight.rotation,
           opacity: 1,
         },
-        1.91,
+        MESSAGE_ASSEMBLY_TIME,
       );
       timeline?.set(
         selectedLetters[index],
         { "--selected-opacity": 0 },
-        1.91,
+        MESSAGE_ASSEMBLY_TIME,
       );
       timeline?.to(
         target,
@@ -511,10 +772,14 @@ export const createEditorialTransformation = ({
             },
           ],
         },
-        1.96 + index * 0.008,
+        MESSAGE_ASSEMBLY_TIME + 0.05 + index * 0.008,
       );
     });
-    timeline.set(finalMessage, { opacity: 1 }, 1.91);
+    timeline.set(finalMessage, { opacity: 1 }, MESSAGE_ASSEMBLY_TIME);
+
+    // Resolve GSAP's CSS start/end values before scroll reaches this chapter.
+    // Both renders happen synchronously with callbacks suppressed, before paint.
+    timeline.progress(1, true).progress(0, true);
 
     if (EDITORIAL_DEBUG.enabled) {
       debugOverlay = document.createElement("pre");
@@ -523,57 +788,42 @@ export const createEditorialTransformation = ({
     }
   };
 
-  const renderMobileWashedLetters = (progress: number) => {
-    if (!mobileWashedCanvas || !mobileWashedContext || !timeline) return;
+  const renderWashedLetters = (progress: number) => {
+    if (!washedContext || !timeline) return;
     const time = progress * timeline.duration();
-    const active = time >= 0.28 && time < 1.8;
-    if (active !== mobileWashedActive) {
-      mobileWashedActive = active;
+    const active = time >= FIRST_FLIGHT_TIME && time < RAIN_AWAY_TIME + 0.52;
+    if (active !== washedActive) {
+      washedActive = active;
       washedLetters.forEach((letter) => {
-        letter.style.visibility = active || time >= 1.8 ? "hidden" : "";
+        letter.style.visibility =
+          active || time >= RAIN_AWAY_TIME + 0.52 ? "hidden" : "";
       });
-      mobileWashedCanvas.style.opacity = active ? "1" : "0";
+      washedCanvas.style.opacity = active ? "1" : "0";
     }
-    mobileWashedContext.clearRect(
-      0,
-      0,
-      mobileWashedCanvas.width,
-      mobileWashedCanvas.height,
-    );
+    washedContext.clearRect(0, 0, washedWidth, washedHeight);
     if (!active) return;
 
-    const firstFlight = 1 - Math.pow(1 - unit((time - 0.28) / 0.42), 2);
-    const secondFlight = unit((time - 0.66) / 0.46);
+    const firstFlight =
+      1 - Math.pow(1 - unit((time - FIRST_FLIGHT_TIME) / 0.42), 2);
+    const secondFlight = unit((time - SECOND_FLIGHT_TIME) / 0.46);
     const secondEase = 0.5 - Math.cos(secondFlight * Math.PI) * 0.5;
-    const rain = Math.pow(unit((time - 1.28) / 0.5), 2);
+    const rain = Math.pow(unit((time - RAIN_AWAY_TIME) / 0.5), 2);
     let currentFont = "";
 
-    mobileWashedGlyphs.forEach((glyph) => {
-      const seed = hash((glyph.sourceIndex + 1) * 91.713);
-      const targetX =
-        mobileWashedCanvas.width *
-        (0.045 + fract(glyph.sourceIndex * 0.61803398875 + seed * 0.11) * 0.91);
-      const targetY =
-        mobileWashedCanvas.height *
-        (0.09 + fract(glyph.sourceIndex * 0.75487766625 + seed * 0.13) * 0.82);
-      const direction = glyph.sourceIndex % 2 === 0 ? -1 : 1;
-      const midTargetX = clamp(
-        mobileWashedCanvas.width * 0.035,
-        mobileWashedCanvas.width * 0.965,
-        lerp(glyph.x, targetX, 0.42) + direction * mobileWashedCanvas.width * 0.1,
+    washedGlyphs.forEach((glyph) => {
+      const x = lerp(
+        lerp(glyph.x, glyph.midTargetX, firstFlight),
+        glyph.targetX,
+        secondEase,
       );
-      const midTargetY = clamp(
-        mobileWashedCanvas.height * 0.075,
-        mobileWashedCanvas.height * 0.925,
-        lerp(glyph.y, targetY, 0.28) - mobileWashedCanvas.height * 0.07,
+      const sourceY = mobile ? glyph.y : glyph.centerY;
+      const y = lerp(
+        lerp(sourceY, glyph.midTargetY, firstFlight),
+        glyph.targetY,
+        secondEase,
       );
-      const x = lerp(lerp(glyph.x, midTargetX, firstFlight), targetX, secondEase);
-      const y = lerp(lerp(glyph.y, midTargetY, firstFlight), targetY, secondEase);
-      const drift =
-        ((glyph.sourceIndex % 7) - 3) * 18 +
-        (glyph.sourceIndex % 2 === 0 ? -1 : 1) * mobileWashedCanvas.width * 0.025;
-      const drawX = lerp(x, targetX + drift, rain);
-      const drawY = lerp(y, targetY + mobileWashedCanvas.height * 1.12, rain);
+      const drawX = lerp(x, glyph.rainTargetX, rain);
+      const drawY = lerp(y, glyph.rainTargetY, rain);
       if (
         ![drawX, drawY].every(Number.isFinite)
       ) {
@@ -582,17 +832,84 @@ export const createEditorialTransformation = ({
 
       if (currentFont !== glyph.font) {
         currentFont = glyph.font;
-        mobileWashedContext.font = currentFont;
+        washedContext.font = currentFont;
       }
-      mobileWashedContext.fillStyle = glyph.color;
-      mobileWashedContext.globalAlpha = 1 - rain;
-      mobileWashedContext.fillText(
-        glyph.character,
-        drawX,
-        drawY,
+      if (mobile) {
+        washedContext.fillStyle = glyph.color;
+        washedContext.globalAlpha = 1 - rain;
+        washedContext.fillText(glyph.character, drawX, drawY);
+        return;
+      }
+
+      const rotation = lerp(
+        lerp(0, glyph.midRotation, firstFlight),
+        glyph.rotation,
+        secondEase,
       );
+      const rainRotation = lerp(rotation, glyph.rainRotation, rain);
+      const firstScale = lerp(1, glyph.scale * 0.9, firstFlight);
+      const baseScale = lerp(firstScale, glyph.scale, secondEase);
+      const scaleX = baseScale * lerp(1, 0.16, rain);
+      const scaleY = baseScale * lerp(1, 2.25, rain);
+      const opacity = 1 - rain;
+      const sprite = glyphSprites.get(glyph.spriteKey);
+      const trailSprite = trailSprites.get(glyph.trailKey);
+      if (!sprite || !trailSprite || opacity <= 0.001) return;
+
+      washedContext.save();
+      washedContext.translate(drawX, drawY);
+      washedContext.rotate((rainRotation * Math.PI) / 180);
+      washedContext.scale(scaleX, scaleY);
+
+      if (rain > 0.001) {
+        const trailStart = glyph.fontSize * 0.08;
+        const visibleTrailHeight = trailSprite.trailHeight * rain;
+        washedContext.globalAlpha = opacity * rain * 0.82;
+        washedContext.drawImage(
+          trailSprite.trail,
+          -trailSprite.trailWidth * 0.5,
+          trailStart,
+          trailSprite.trailWidth,
+          visibleTrailHeight,
+        );
+        washedContext.globalAlpha = opacity * rain * 0.94;
+        washedContext.drawImage(
+          trailSprite.drop,
+          -trailSprite.dropWidth * 0.5,
+          trailStart + visibleTrailHeight,
+          trailSprite.dropWidth,
+          trailSprite.dropHeight,
+        );
+      }
+
+      const spriteX = -sprite.originX;
+      const spriteY = glyph.baselineOffset - sprite.baseline;
+      const normalOpacity = opacity * (1 - rain);
+      if (normalOpacity > 0.001) {
+        washedContext.globalAlpha = normalOpacity;
+        washedContext.drawImage(
+          sprite.normal,
+          spriteX,
+          spriteY,
+          sprite.width,
+          sprite.height,
+        );
+      }
+      const washedOpacity = opacity * rain;
+      if (washedOpacity > 0.001) {
+        washedContext.globalAlpha = washedOpacity;
+        washedContext.drawImage(
+          sprite.washed,
+          spriteX,
+          spriteY,
+          sprite.width,
+          sprite.height,
+        );
+      }
+      washedContext.restore();
     });
-    mobileWashedContext.globalAlpha = 1;
+    washedContext.globalAlpha = 1;
+    washedContext.filter = "none";
   };
 
   const prepareTimeline = () => {
@@ -610,12 +927,15 @@ export const createEditorialTransformation = ({
     }
   });
 
-  return {
-    setProgress: (progress) => {
-      const value = Math.min(1, Math.max(0, progress));
-      if (!timeline) createTimeline();
-      timeline?.progress(value);
-      renderMobileWashedLetters(value);
+  const renderAtTime = (requestedTime: number) => {
+    if (!timeline) createTimeline();
+    if (!timeline) return;
+    const time = Math.min(timeline.duration(), Math.max(0, requestedTime));
+    if (Math.abs(time - lastRenderedTime) < 0.00005) return;
+    lastRenderedTime = time;
+    const value = timeline.duration() > 0 ? time / timeline.duration() : 0;
+    timeline.time(time);
+    renderWashedLetters(value);
       EDITORIAL_DEBUG.rainAwayProgress = Math.max(
         0,
         Math.min(1, (value - 0.39) / 0.3),
@@ -639,6 +959,48 @@ export const createEditorialTransformation = ({
           `final message ${EDITORIAL_DEBUG.finalMessagePosition}`,
         ].join("\n");
       }
+  };
+
+  return {
+    getLightningTriggerProgress: () => {
+      if (!timeline) createTimeline();
+      if (!timeline || timeline.duration() <= HIGHLIGHT_READY_TIME) return 1;
+      return (
+        (LIGHTNING_START_TIME - HIGHLIGHT_READY_TIME) /
+        (timeline.duration() - HIGHLIGHT_READY_TIME)
+      );
+    },
+    setHighlightProgress: (progress) => {
+      const value = Math.min(1, Math.max(0, progress));
+      renderAtTime(value * HIGHLIGHT_READY_TIME);
+    },
+    setLightningSequenceProgress: (progress) => {
+      if (!timeline) createTimeline();
+      if (!timeline) return;
+      const value = Math.min(1, Math.max(0, progress));
+      renderAtTime(
+        LIGHTNING_START_TIME +
+          value * (timeline.duration() - LIGHTNING_START_TIME),
+      );
+    },
+    setProgress: (progress, lightningComplete = false) => {
+      if (!timeline) createTimeline();
+      if (!timeline) return;
+      const value = Math.min(1, Math.max(0, progress));
+      const lightningTriggerProgress =
+        (LIGHTNING_START_TIME - HIGHLIGHT_READY_TIME) /
+        (timeline.duration() - HIGHLIGHT_READY_TIME);
+      if (value < lightningTriggerProgress) {
+        renderAtTime(
+          HIGHLIGHT_READY_TIME +
+            (value / lightningTriggerProgress) *
+              (LIGHTNING_START_TIME - HIGHLIGHT_READY_TIME),
+        );
+        return;
+      }
+      renderAtTime(
+        lightningComplete ? timeline.duration() : LIGHTNING_START_TIME,
+      );
     },
     destroy: () => {
       if (preparationHandle !== undefined) {
@@ -649,7 +1011,9 @@ export const createEditorialTransformation = ({
         }
       }
       timeline?.kill();
-      mobileWashedCanvas?.remove();
+      glyphSprites.clear();
+      trailSprites.clear();
+      washedCanvas.remove();
       lightningCanvas.destroy();
       debugOverlay?.remove();
       selectedLetters.forEach((letter) =>

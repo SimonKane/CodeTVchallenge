@@ -213,10 +213,6 @@ export class ExperienceScene {
   readonly camera = new PerspectiveCamera(47, 1, 0.1, 40);
   private elapsed = 0;
   private previousTime = 0;
-  private performanceSampleStart = 0;
-  private performanceSampleDuration = 0;
-  private performanceSampleFrames = 0;
-  private adaptiveQualitySettled = false;
   private readonly pointer = new Vector2();
   private readonly pointerTarget = new Vector2();
   private readonly quality: QualityPreset;
@@ -243,6 +239,9 @@ export class ExperienceScene {
   private childVisibility = 0;
   private readonly viewDirection = new Vector3();
   private readonly drawingBufferSize = new Vector2();
+  private viewportWidth = 0;
+  private viewportHeight = 0;
+  private viewportPixelRatio = 0;
   private debugGroup?: Group;
   private debugOverlay?: HTMLDivElement;
   private debugEnabled = false;
@@ -289,10 +288,23 @@ export class ExperienceScene {
     );
     this.createWorld(this.assets);
     this.resize();
+    await this.warmRenderer();
     if (!this.quality.mobile && matchMedia("(pointer: fine)").matches) {
       addEventListener("pointermove", this.handlePointer, { passive: true });
     }
     if (import.meta.env.DEV) this.createDebugTools();
+  }
+
+  private async warmRenderer() {
+    try {
+      await this.renderer.compileAsync(this.scene, this.camera);
+    } catch {
+      this.renderer.compile(this.scene, this.camera);
+    }
+    // The first composer render uploads textures and compiles effect passes
+    // while the scene is still visually hidden.
+    this.post?.render(0);
+    this.renderer.info.reset();
   }
 
   private createChildMaterial(
@@ -608,6 +620,17 @@ export class ExperienceScene {
   resize() {
     const width = Math.max(1, this.canvas.clientWidth);
     const height = Math.max(1, this.canvas.clientHeight);
+    const pixelRatio = this.renderer.getPixelRatio();
+    if (
+      width === this.viewportWidth &&
+      height === this.viewportHeight &&
+      pixelRatio === this.viewportPixelRatio
+    ) {
+      return;
+    }
+    this.viewportWidth = width;
+    this.viewportHeight = height;
+    this.viewportPixelRatio = pixelRatio;
     this.mobileLayout = this.quality.mobile || width <= 720;
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
@@ -740,26 +763,6 @@ export class ExperienceScene {
       const frameDuration = this.previousTime ? seconds - this.previousTime : 0;
       const delta = Math.min(0.04, frameDuration);
       this.previousTime = seconds;
-      if (!this.adaptiveQualitySettled && frameDuration > 0 && frameDuration < 0.5) {
-        if (!this.performanceSampleStart) this.performanceSampleStart = seconds;
-        this.performanceSampleDuration += frameDuration;
-        this.performanceSampleFrames += 1;
-        if (seconds - this.performanceSampleStart >= 2) {
-          const averageFrameDuration =
-            this.performanceSampleDuration / this.performanceSampleFrames;
-          if (this.performanceSampleFrames >= 8 && averageFrameDuration > 1 / 42) {
-            this.post?.setEnabled(false);
-            this.rain?.setDensity(0.58);
-            this.fog?.setDensity(3);
-            if (this.quality.pixelRatio > 1.25) {
-              this.renderer.setPixelRatio(1.25);
-              this.resize();
-            }
-            this.canvas.dataset.adaptiveQuality = "reduced";
-          }
-          this.adaptiveQualitySettled = true;
-        }
-      }
       this.elapsed += delta;
       this.pointer.lerp(this.pointerTarget, 0.045);
       this.updateChildParallax();
@@ -794,8 +797,6 @@ export class ExperienceScene {
     removeEventListener("keydown", this.handleDebug);
     this.debugOverlay?.remove();
     this.rain?.dispose();
-    this.fog?.dispose();
-    this.road?.dispose();
     this.post?.dispose();
     this.scene.traverse((object) => {
       if (object instanceof Mesh) {

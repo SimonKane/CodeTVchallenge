@@ -13,8 +13,16 @@ const POST_REVEAL_SLOWDOWN = 1.15;
 const UMBRELLA_FADE_TIME = 2.68;
 const UMBRELLA_ENTRANCE_END_TIME = 3.05;
 const UMBRELLA_TEXT_START_DELAY = 0.08;
-const UMBRELLA_TEXT_INTRO_DURATION = 2.85;
+const UMBRELLA_TEXT_RAIN_DURATION = 3.2;
+const UMBRELLA_OPENING_DURATION = 3;
+const UMBRELLA_OPENING_PHASE_PROGRESS = 0.72;
+const SEQUENCE_INPUT_RELEASE_DELAY = 320;
+const SEQUENCE_TOUCH_STALE_DELAY = 700;
 const SEQUENCE_RESET_HYSTERESIS = 0.03;
+const EDITORIAL_SCROLL_DURATION = 1.66;
+const EDITORIAL_HIGHLIGHT_START_DELAY = 0.035;
+const EDITORIAL_HIGHLIGHT_DURATION = 0.9;
+const EDITORIAL_LIGHTNING_DURATION = 1.4;
 
 const slowPostRevealTime = (time: number) =>
   REVEAL_TRIGGER_TIME +
@@ -66,17 +74,56 @@ interface ScrollBounds {
 const createScrollGovernor = (
   getBounds: () => ScrollBounds | undefined,
   getLockedY: () => number | undefined,
+  onLockedInput: (event: Event) => void,
 ) => {
   const scrollState = { y: scrollY };
   let targetY = scrollY;
-  let scrollTween: gsap.core.Tween | undefined;
+  let scrolling = false;
 
-  const queueScroll = (delta: number) => {
+  const stopScrolling = () => {
+    if (!scrolling) return;
+    scrolling = false;
+    gsap.ticker.remove(updateScroll);
+  };
+
+  function updateScroll(_time: number, deltaTime: number) {
     const lockedY = getLockedY();
     if (lockedY !== undefined) {
-      scrollTween?.kill();
       targetY = lockedY;
+      scrollState.y = lockedY;
       scrollTo(0, lockedY);
+      stopScrolling();
+      return;
+    }
+
+    const difference = targetY - scrollState.y;
+    if (Math.abs(difference) <= 0.5) {
+      scrollState.y = targetY;
+      scrollTo(0, targetY);
+      stopScrolling();
+      return;
+    }
+
+    const frameTime = Math.min(34, Math.max(0, deltaTime || 16.67));
+    const blend = 1 - Math.exp(-frameTime / 65);
+    scrollState.y += difference * blend;
+    scrollTo(0, scrollState.y);
+  }
+
+  const startScrolling = () => {
+    if (scrolling) return;
+    scrolling = true;
+    gsap.ticker.add(updateScroll);
+  };
+
+  const queueScroll = (delta: number, event: Event) => {
+    const lockedY = getLockedY();
+    if (lockedY !== undefined) {
+      onLockedInput(event);
+      targetY = lockedY;
+      scrollState.y = lockedY;
+      scrollTo(0, lockedY);
+      stopScrolling();
       return true;
     }
 
@@ -98,7 +145,7 @@ const createScrollGovernor = (
     const maxStep = viewport * 1.15;
     const maxLead = viewport * 1.45;
     const scaledDelta = Math.sign(delta) * Math.min(Math.abs(delta), maxStep);
-    const queuedFrom = scrollTween?.isActive() ? targetY : currentY;
+    const queuedFrom = scrolling ? targetY : currentY;
     targetY = Math.min(
       bounds.end,
       Math.max(
@@ -107,24 +154,8 @@ const createScrollGovernor = (
       ),
     );
 
-    scrollTween?.kill();
-    scrollState.y = currentY;
-    const distance = Math.abs(targetY - currentY);
-    scrollTween = gsap.to(scrollState, {
-      y: targetY,
-      duration: 0.18 + (distance / viewport) * 0.18,
-      ease: "power2.out",
-      overwrite: true,
-      onUpdate: () => {
-        const lockedY = getLockedY();
-        if (lockedY !== undefined) {
-          scrollTween?.kill();
-          targetY = lockedY;
-          scrollState.y = lockedY;
-        }
-        scrollTo(0, scrollState.y);
-      },
-    });
+    if (!scrolling) scrollState.y = currentY;
+    startScrolling();
     return true;
   };
 
@@ -136,7 +167,7 @@ const createScrollGovernor = (
         : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
           ? innerHeight
           : 1;
-    if (queueScroll(event.deltaY * modeMultiplier)) event.preventDefault();
+    if (queueScroll(event.deltaY * modeMultiplier, event)) event.preventDefault();
   };
 
   const handleKeydown = (event: KeyboardEvent) => {
@@ -161,15 +192,20 @@ const createScrollGovernor = (
       Home: -innerHeight * 0.52,
     };
     const delta = distances[event.key];
-    if (delta !== undefined && queueScroll(delta)) event.preventDefault();
+    if (delta !== undefined && queueScroll(delta, event)) event.preventDefault();
   };
 
   const handleTouchMove = (event: TouchEvent) => {
     const lockedY = getLockedY();
     if (lockedY === undefined) return;
+    onLockedInput(event);
     event.preventDefault();
     event.stopImmediatePropagation();
     scrollTo(0, lockedY);
+  };
+
+  const handleTouchBoundary = (event: TouchEvent) => {
+    onLockedInput(event);
   };
 
   const handleScroll = () => {
@@ -182,32 +218,51 @@ const createScrollGovernor = (
   addEventListener("wheel", handleWheel, { passive: false });
   addEventListener("keydown", handleKeydown);
   addEventListener("touchmove", handleTouchMove, { passive: false });
+  addEventListener("touchstart", handleTouchBoundary, { passive: true });
+  addEventListener("touchend", handleTouchBoundary, { passive: true });
+  addEventListener("touchcancel", handleTouchBoundary, { passive: true });
   addEventListener("scroll", handleScroll, { passive: true });
 
   return () => {
-    scrollTween?.kill();
+    stopScrolling();
     removeEventListener("wheel", handleWheel);
     removeEventListener("keydown", handleKeydown);
     removeEventListener("touchmove", handleTouchMove);
+    removeEventListener("touchstart", handleTouchBoundary);
+    removeEventListener("touchend", handleTouchBoundary);
+    removeEventListener("touchcancel", handleTouchBoundary);
     removeEventListener("scroll", handleScroll);
   };
 };
 
-const createSequenceLockGuard = (getLockedY: () => number | undefined) => {
+const createSequenceLockGuard = (
+  getLockedY: () => number | undefined,
+  onLockedInput: (event: Event) => void,
+) => {
   const holdLockedPosition = (event?: Event) => {
+    if (event instanceof TouchEvent) onLockedInput(event);
     const lockedY = getLockedY();
     if (lockedY === undefined) return;
+    if (event && event.type !== "scroll" && !(event instanceof TouchEvent)) {
+      onLockedInput(event);
+    }
     if (event?.cancelable) event.preventDefault();
     if (Math.abs(scrollY - lockedY) > 0.5) scrollTo(0, lockedY);
   };
 
   addEventListener("wheel", holdLockedPosition, { passive: false });
   addEventListener("touchmove", holdLockedPosition, { passive: false });
+  addEventListener("touchstart", holdLockedPosition, { passive: false });
+  addEventListener("touchend", holdLockedPosition, { passive: false });
+  addEventListener("touchcancel", holdLockedPosition, { passive: false });
   addEventListener("scroll", holdLockedPosition, { passive: true });
 
   return () => {
     removeEventListener("wheel", holdLockedPosition);
     removeEventListener("touchmove", holdLockedPosition);
+    removeEventListener("touchstart", holdLockedPosition);
+    removeEventListener("touchend", holdLockedPosition);
+    removeEventListener("touchcancel", holdLockedPosition);
     removeEventListener("scroll", holdLockedPosition);
   };
 };
@@ -234,6 +289,8 @@ export const createNarrativeTimeline = (
   const introState = { light: 0, environment: 0, child: 0 };
   const narrative = { progress: 0, lightning: 0.12 };
   const editorialState = { progress: 0 };
+  const editorialHighlightState = { progress: 0 };
+  const editorialLightningState = { progress: 0 };
   const umbrellaEntranceState = { progress: 0 };
   const umbrellaState = { progress: 0 };
   const umbrellaTextIntroState = { progress: 0 };
@@ -241,15 +298,25 @@ export const createNarrativeTimeline = (
   const rainState = { visibility: 1 };
   let scrollTimeline: gsap.core.Timeline | undefined;
   let textRevealTimeline: gsap.core.Timeline | undefined;
+  let editorialHighlightTimeline: gsap.core.Timeline | undefined;
+  let editorialLightningTimeline: gsap.core.Timeline | undefined;
   let umbrellaTextIntroTimeline: gsap.core.Timeline | undefined;
   let scrollNormalizer: { kill: () => void } | undefined;
   let destroyScrollGovernor: (() => void) | undefined;
   let textRevealStarted = false;
   let textRevealComplete = false;
+  let editorialHighlightStarted = false;
+  let editorialHighlightComplete = false;
+  let editorialLightningStarted = false;
+  let editorialLightningComplete = false;
   let umbrellaTextIntroStarted = false;
   let umbrellaTextIntroComplete = false;
   let sequenceLockY: number | undefined;
   let sequenceLockProgress: number | undefined;
+  let sequenceUnlockTimer: number | undefined;
+  let sequenceUnlockPending = false;
+  let sequenceTouchActive = false;
+  let sequenceLastInputAt = 0;
   let refreshFrame: number | undefined;
   let progressBeforeRefresh: number | undefined;
   let scenePausedForEditorial = false;
@@ -286,9 +353,48 @@ export const createNarrativeTimeline = (
   ];
 
   const unlockSequence = () => {
+    if (sequenceUnlockTimer !== undefined) {
+      clearTimeout(sequenceUnlockTimer);
+      sequenceUnlockTimer = undefined;
+    }
+    sequenceUnlockPending = false;
+    sequenceTouchActive = false;
     sequenceLockY = undefined;
     sequenceLockProgress = undefined;
     delete chapter.dataset.sequenceLocked;
+  };
+
+  const scheduleSequenceUnlock = () => {
+    if (!sequenceUnlockPending || sequenceLockY === undefined) return;
+    if (sequenceUnlockTimer !== undefined) clearTimeout(sequenceUnlockTimer);
+    const quietTime = performance.now() - sequenceLastInputAt;
+    const remainingQuietTime = Math.max(
+      0,
+      SEQUENCE_INPUT_RELEASE_DELAY - quietTime,
+    );
+    const remainingTouchTime = sequenceTouchActive
+      ? Math.max(0, SEQUENCE_TOUCH_STALE_DELAY - quietTime)
+      : 0;
+    const delay = Math.max(remainingQuietTime, remainingTouchTime);
+    if (delay > 0) {
+      sequenceUnlockTimer = window.setTimeout(scheduleSequenceUnlock, delay);
+      return;
+    }
+    unlockSequence();
+  };
+
+  const requestSequenceUnlock = () => {
+    sequenceUnlockPending = true;
+    scheduleSequenceUnlock();
+  };
+
+  const noteLockedInput = (event: Event) => {
+    if (event instanceof TouchEvent) {
+      sequenceTouchActive = event.touches.length > 0;
+    }
+    if (sequenceLockY === undefined) return;
+    sequenceLastInputAt = performance.now();
+    if (sequenceUnlockPending) scheduleSequenceUnlock();
   };
 
   const resetTextReveal = () => {
@@ -314,7 +420,7 @@ export const createNarrativeTimeline = (
       .timeline({
         onComplete: () => {
           textRevealComplete = true;
-          unlockSequence();
+          requestSequenceUnlock();
         },
       })
       .to(textRevealState, {
@@ -333,6 +439,70 @@ export const createNarrativeTimeline = (
         },
         2,
       );
+  };
+
+  const resetEditorialHighlight = () => {
+    editorialHighlightTimeline?.kill();
+    editorialHighlightTimeline = undefined;
+    editorialHighlightStarted = false;
+    editorialHighlightComplete = false;
+    editorialHighlightState.progress = 0;
+    editorialTransformation.setHighlightProgress(0);
+    unlockSequence();
+  };
+
+  const playEditorialHighlight = (lockY: number, lockProgress: number) => {
+    if (editorialHighlightStarted) return;
+    editorialHighlightStarted = true;
+    sequenceLockY = lockY;
+    sequenceLockProgress = lockProgress;
+    chapter.dataset.sequenceLocked = "true";
+    scrollTo(0, lockY);
+    editorialHighlightTimeline = gsap.to(editorialHighlightState, {
+      progress: 1,
+      duration: EDITORIAL_HIGHLIGHT_DURATION,
+      ease: "power2.inOut",
+      onUpdate: () =>
+        editorialTransformation.setHighlightProgress(
+          editorialHighlightState.progress,
+        ),
+      onComplete: () => {
+        editorialHighlightComplete = true;
+        requestSequenceUnlock();
+      },
+    });
+  };
+
+  const resetEditorialLightning = () => {
+    editorialLightningTimeline?.kill();
+    editorialLightningTimeline = undefined;
+    editorialLightningStarted = false;
+    editorialLightningComplete = false;
+    editorialLightningState.progress = 0;
+    editorialTransformation.setProgress(editorialState.progress, false);
+    unlockSequence();
+  };
+
+  const playEditorialLightning = (lockY: number, lockProgress: number) => {
+    if (editorialLightningStarted) return;
+    editorialLightningStarted = true;
+    sequenceLockY = lockY;
+    sequenceLockProgress = lockProgress;
+    chapter.dataset.sequenceLocked = "true";
+    scrollTo(0, lockY);
+    editorialLightningTimeline = gsap.to(editorialLightningState, {
+      progress: 1,
+      duration: EDITORIAL_LIGHTNING_DURATION,
+      ease: "none",
+      onUpdate: () =>
+        editorialTransformation.setLightningSequenceProgress(
+          editorialLightningState.progress,
+        ),
+      onComplete: () => {
+        editorialLightningComplete = true;
+        requestSequenceUnlock();
+      },
+    });
   };
 
   const resetUmbrellaTextIntro = () => {
@@ -355,18 +525,26 @@ export const createNarrativeTimeline = (
     umbrellaTextIntroTimeline = gsap.timeline({
       onComplete: () => {
         umbrellaTextIntroComplete = true;
-        unlockSequence();
+        requestSequenceUnlock();
       },
     });
-    umbrellaTextIntroTimeline.to(umbrellaTextIntroState, {
-      progress: 1,
-      duration: UMBRELLA_TEXT_INTRO_DURATION,
-      ease: "power2.inOut",
-      onUpdate: () =>
-        umbrellaTransformation.setTextIntroProgress(
-          umbrellaTextIntroState.progress,
-        ),
-    });
+    const renderUmbrellaIntro = () =>
+      umbrellaTransformation.setTextIntroProgress(
+        umbrellaTextIntroState.progress,
+      );
+    umbrellaTextIntroTimeline
+      .to(umbrellaTextIntroState, {
+        progress: UMBRELLA_OPENING_PHASE_PROGRESS,
+        duration: UMBRELLA_TEXT_RAIN_DURATION,
+        ease: "power1.inOut",
+        onUpdate: renderUmbrellaIntro,
+      })
+      .to(umbrellaTextIntroState, {
+        progress: 1,
+        duration: UMBRELLA_OPENING_DURATION,
+        ease: "none",
+        onUpdate: renderUmbrellaIntro,
+      });
   };
 
   const renderIntro = () => {
@@ -408,6 +586,16 @@ export const createNarrativeTimeline = (
     const mobileScroll = matchMedia(
       "(max-width: 800px), (pointer: coarse)",
     ).matches;
+    const editorialHighlightStartTime = slowPostRevealTime(
+      REVEAL_TRIGGER_TIME + EDITORIAL_HIGHLIGHT_START_DELAY,
+    );
+    const editorialScrollDuration = slowPostRevealDuration(
+      EDITORIAL_SCROLL_DURATION,
+    );
+    const editorialLightningStartTime =
+      editorialHighlightStartTime +
+      editorialTransformation.getLightningTriggerProgress() *
+        editorialScrollDuration;
     const umbrellaTextStartTime =
       UMBRELLA_ENTRANCE_END_TIME + UMBRELLA_TEXT_START_DELAY;
     syncChapterState(0);
@@ -426,6 +614,10 @@ export const createNarrativeTimeline = (
           const duration = scrollTimeline?.duration() ?? 0;
           if (!duration) return;
           const revealThreshold = REVEAL_TRIGGER_TIME / duration;
+          const editorialHighlightThreshold =
+            editorialHighlightStartTime / duration;
+          const editorialLightningThreshold =
+            editorialLightningStartTime / duration;
           const umbrellaThreshold =
             slowPostRevealTime(umbrellaTextStartTime) / duration;
           if (trigger.progress >= revealThreshold && !textRevealStarted) {
@@ -437,6 +629,38 @@ export const createNarrativeTimeline = (
             textRevealComplete
           ) {
             resetTextReveal();
+          }
+          if (
+            textRevealComplete &&
+            trigger.progress >= editorialHighlightThreshold &&
+            !editorialHighlightStarted
+          ) {
+            const lockY =
+              trigger.start +
+              (trigger.end - trigger.start) * editorialHighlightThreshold;
+            playEditorialHighlight(lockY, editorialHighlightThreshold);
+          } else if (
+            trigger.progress <
+              editorialHighlightThreshold - SEQUENCE_RESET_HYSTERESIS &&
+            editorialHighlightComplete
+          ) {
+            resetEditorialHighlight();
+          }
+          if (
+            editorialHighlightComplete &&
+            trigger.progress >= editorialLightningThreshold &&
+            !editorialLightningStarted
+          ) {
+            const lockY =
+              trigger.start +
+              (trigger.end - trigger.start) * editorialLightningThreshold;
+            playEditorialLightning(lockY, editorialLightningThreshold);
+          } else if (
+            trigger.progress <
+              editorialLightningThreshold - SEQUENCE_RESET_HYSTERESIS &&
+            editorialLightningComplete
+          ) {
+            resetEditorialLightning();
           }
           if (
             umbrellaChapter &&
@@ -672,11 +896,14 @@ export const createNarrativeTimeline = (
         editorialState,
         {
           progress: 1,
-          duration: slowPostRevealDuration(1.34),
+          duration: editorialScrollDuration,
           ease: "none",
           onUpdate: () => {
-            if (textRevealComplete) {
-              editorialTransformation.setProgress(editorialState.progress);
+            if (textRevealComplete && editorialHighlightComplete) {
+              editorialTransformation.setProgress(
+                editorialState.progress,
+                editorialLightningComplete,
+              );
               if (
                 matchMedia("(max-width: 800px), (pointer: coarse)").matches
               ) {
@@ -694,7 +921,7 @@ export const createNarrativeTimeline = (
             }
           },
         },
-        slowPostRevealTime(1),
+        editorialHighlightStartTime,
       );
 
     if (umbrellaChapter) {
@@ -741,11 +968,15 @@ export const createNarrativeTimeline = (
       return trigger ? { start: trigger.start, end: trigger.end } : undefined;
     };
     if (mobileScroll) {
-      destroyScrollGovernor = createSequenceLockGuard(() => sequenceLockY);
+      destroyScrollGovernor = createSequenceLockGuard(
+        () => sequenceLockY,
+        noteLockedInput,
+      );
     } else {
       destroyScrollGovernor = createScrollGovernor(
         getBounds,
         () => sequenceLockY,
+        noteLockedInput,
       );
       scrollNormalizer = ScrollTrigger.normalizeScroll({
         type: "touch",
@@ -816,6 +1047,8 @@ export const createNarrativeTimeline = (
     destroy: () => {
       intro.kill();
       textRevealTimeline?.kill();
+      editorialHighlightTimeline?.kill();
+      editorialLightningTimeline?.kill();
       umbrellaTextIntroTimeline?.kill();
       unlockSequence();
       if (scenePausedForEditorial) {
@@ -842,6 +1075,8 @@ export const createNarrativeTimeline = (
         introState,
         narrative,
         editorialState,
+        editorialHighlightState,
+        editorialLightningState,
         umbrellaEntranceState,
         umbrellaState,
         umbrellaTextIntroState,

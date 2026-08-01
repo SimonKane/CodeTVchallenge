@@ -8,9 +8,11 @@ interface ExperienceInstance {
   narrative: NarrativeController;
   resizeObserver: ResizeObserver;
   handleVisibility: () => void;
+  decodeHandle?: number;
 }
 
 const instances = new Map<HTMLElement, ExperienceInstance>();
+const initializing = new WeakSet<HTMLElement>();
 
 const resetScrollOnReload = () => {
   const navigation = performance.getEntriesByType(
@@ -65,22 +67,22 @@ const destroyExperience = (root: HTMLElement) => {
   instance.narrative.destroy();
   instance.resizeObserver.disconnect();
   document.removeEventListener("visibilitychange", instance.handleVisibility);
+  if (instance.decodeHandle !== undefined) {
+    if ("cancelIdleCallback" in window) {
+      cancelIdleCallback(instance.decodeHandle);
+    } else {
+      cancelAnimationFrame(instance.decodeHandle);
+    }
+  }
   instance.scene.dispose();
   instances.delete(root);
 };
 
 const initializeExperience = async (root: HTMLElement) => {
-  if (
-    instances.has(root) ||
-    matchMedia("(prefers-reduced-motion: reduce)").matches ||
-    !supportsWebGL()
-  ) {
-    if (!instances.has(root)) {
-      activateFallback(
-        root,
-        matchMedia("(prefers-reduced-motion: reduce)").matches,
-      );
-    }
+  if (instances.has(root) || initializing.has(root)) return;
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reducedMotion || !supportsWebGL()) {
+    activateFallback(root, reducedMotion);
     return;
   }
 
@@ -124,6 +126,7 @@ const initializeExperience = async (root: HTMLElement) => {
     return;
   }
 
+  initializing.add(root);
   try {
     const scene = new ExperienceScene({
       canvas,
@@ -161,12 +164,28 @@ const initializeExperience = async (root: HTMLElement) => {
     const handleVisibility = () =>
       document.hidden ? scene.pause() : scene.start();
     document.addEventListener("visibilitychange", handleVisibility);
-    instances.set(root, { scene, narrative, resizeObserver, handleVisibility });
+    const decodeLaterImages = () => {
+      chapter
+        .querySelectorAll<HTMLImageElement>("img")
+        .forEach((image) => void image.decode().catch(() => undefined));
+    };
+    const decodeHandle = "requestIdleCallback" in window
+      ? requestIdleCallback(decodeLaterImages, { timeout: 1400 })
+      : requestAnimationFrame(decodeLaterImages);
+    instances.set(root, {
+      scene,
+      narrative,
+      resizeObserver,
+      handleVisibility,
+      decodeHandle,
+    });
     root.dataset.sceneStatus = "ready";
     scene.start();
   } catch (error) {
     console.warn("WebGL experience unavailable; showing static scene.", error);
     activateFallback(root);
+  } finally {
+    initializing.delete(root);
   }
 };
 

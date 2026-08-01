@@ -18,9 +18,9 @@ const fract = (value: number) => value - Math.floor(value);
 const hash = (value: number) => fract(Math.sin(value) * 43758.5453123);
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
 const BACKGROUND_READY_TIME = 0.6;
-// Keep a short readable hold after the last letters land, then let the next
-// scroll reach the lightning/opening instead of crossing an empty interval.
-const TEXT_READY_TIME = 2.66;
+const TEXT_SETTLED_TIME = 2.66;
+const UMBRELLA_OPEN_READY_TIME = 3.44;
+const OPENING_INTRO_PROGRESS = 0.72;
 
 const splitIntoRainCharacters = (element: HTMLElement) => {
   const textNodes: Text[] = [];
@@ -142,6 +142,7 @@ export const createUmbrellaChapter = (
   let entranceProgress = 0;
   let requestedProgress = 0;
   let textIntroProgress = 0;
+  let previousEffectiveTime = -1;
 
   gsap.set(stage, { opacity: 0 });
   gsap.set(closedUmbrella, {
@@ -299,22 +300,38 @@ export const createUmbrellaChapter = (
     )
     .to({}, { duration: 0.72 });
 
+  // Warm all CSSPlugin property renderers before the umbrella is visible.
+  timeline.progress(1, true).progress(0, true);
+
   const renderProgress = () => {
     const timelineDuration = timeline.duration();
     const effectiveTime =
       textIntroProgress >= 1
-        ? TEXT_READY_TIME +
-          requestedProgress * (timelineDuration - TEXT_READY_TIME)
-        : textIntroProgress > 0
+        ? UMBRELLA_OPEN_READY_TIME +
+          requestedProgress * (timelineDuration - UMBRELLA_OPEN_READY_TIME)
+        : textIntroProgress > OPENING_INTRO_PROGRESS
+          ? TEXT_SETTLED_TIME +
+            ((textIntroProgress - OPENING_INTRO_PROGRESS) /
+              (1 - OPENING_INTRO_PROGRESS)) *
+              (UMBRELLA_OPEN_READY_TIME - TEXT_SETTLED_TIME)
+          : textIntroProgress > 0
           ? BACKGROUND_READY_TIME +
-            textIntroProgress * (TEXT_READY_TIME - BACKGROUND_READY_TIME)
+            (textIntroProgress / OPENING_INTRO_PROGRESS) *
+              (TEXT_SETTLED_TIME - BACKGROUND_READY_TIME)
           : entranceProgress * BACKGROUND_READY_TIME;
     experienceChapter?.classList.toggle(
       "experience-chapter--umbrella-active",
       entranceProgress >= 0.98 || textIntroProgress > 0 || requestedProgress > 0,
     );
     timeline.time(effectiveTime, false);
-    rainCanvas.invalidateGeometry();
+    const canopyIsMoving = effectiveTime >= 2.78 && effectiveTime <= 3.44;
+    const crossedCanopyMotion =
+      (previousEffectiveTime < 2.78 && effectiveTime > 3.44) ||
+      (previousEffectiveTime > 3.44 && effectiveTime < 2.78);
+    if (canopyIsMoving || crossedCanopyMotion || previousEffectiveTime < 0) {
+      rainCanvas.invalidateGeometry();
+    }
+    previousEffectiveTime = effectiveTime;
   };
 
   return {
@@ -334,6 +351,7 @@ export const createUmbrellaChapter = (
       entranceProgress = 0;
       requestedProgress = 0;
       textIntroProgress = 0;
+      previousEffectiveTime = -1;
       experienceChapter?.classList.toggle(
         "experience-chapter--umbrella-active",
         false,

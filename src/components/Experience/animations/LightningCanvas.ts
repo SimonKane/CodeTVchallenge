@@ -85,7 +85,7 @@ export const createLightningCanvas = (
 ): LightningCanvasController => {
   const context = canvas.getContext("2d");
   const mobile = matchMedia("(max-width: 800px), (pointer: coarse)").matches;
-  const pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
+  let pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
   let width = 1;
   let height = 1;
   let progress = 0;
@@ -93,8 +93,20 @@ export const createLightningCanvas = (
 
   const rebuild = () => {
     const bounds = canvas.getBoundingClientRect();
-    width = Math.max(1, bounds.width);
-    height = Math.max(1, bounds.height);
+    const nextWidth = Math.max(1, bounds.width);
+    const nextHeight = Math.max(1, bounds.height);
+    const nextPixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
+    if (
+      nextWidth === width &&
+      nextHeight === height &&
+      nextPixelRatio === pixelRatio &&
+      bolts.length > 0
+    ) {
+      return;
+    }
+    width = nextWidth;
+    height = nextHeight;
+    pixelRatio = nextPixelRatio;
     canvas.width = Math.round(width * pixelRatio);
     canvas.height = Math.round(height * pixelRatio);
     context?.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);

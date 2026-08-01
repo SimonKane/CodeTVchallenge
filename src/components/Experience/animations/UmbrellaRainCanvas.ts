@@ -53,11 +53,14 @@ export const createUmbrellaRainCanvas = (
 ): UmbrellaRainCanvasController => {
   const context = canvas.getContext("2d");
   const mobile = matchMedia("(max-width: 800px), (pointer: coarse)").matches;
-  const pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
+  let pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
   const rain: RainDrop[] = [];
   const splashes: SplashDrop[] = [];
   const impactCrowns: ImpactCrown[] = [];
   const runoff: RunoffDrop[] = [];
+  const splashPool: SplashDrop[] = [];
+  const crownPool: ImpactCrown[] = [];
+  const runoffPool: RunoffDrop[] = [];
   let width = 1;
   let height = 1;
   let visibility = 0;
@@ -105,39 +108,62 @@ export const createUmbrellaRainCanvas = (
   const createImpact = (x: number, y: number) => {
     const side = (x < canopy.centerX ? -1 : 1) as -1 | 1;
     const crownLife = 0.1 + Math.random() * 0.07;
-    impactCrowns.push({ x, y, side, life: crownLife, maxLife: crownLife });
+    const crown = crownPool.pop() ?? ({} as ImpactCrown);
+    crown.x = x;
+    crown.y = y;
+    crown.side = side;
+    crown.life = crownLife;
+    crown.maxLife = crownLife;
+    impactCrowns.push(crown);
     const splashCount = 2 + Math.floor(Math.random() * 3);
     for (let index = 0; index < splashCount; index += 1) {
       const maxLife = 0.14 + Math.random() * 0.13;
-      splashes.push({
-        x,
-        y,
-        vx: side * (28 + Math.random() * 95) + (Math.random() - 0.5) * 50,
-        vy: -45 - Math.random() * 85,
-        life: maxLife,
-        maxLife,
-        size: 0.7 + Math.random() * 1.4,
-      });
+      const splash = splashPool.pop() ?? ({} as SplashDrop);
+      splash.x = x;
+      splash.y = y;
+      splash.vx =
+        side * (28 + Math.random() * 95) + (Math.random() - 0.5) * 50;
+      splash.vy = -45 - Math.random() * 85;
+      splash.life = maxLife;
+      splash.maxLife = maxLife;
+      splash.size = 0.7 + Math.random() * 1.4;
+      splashes.push(splash);
     }
 
     if (runoff.length < 100 && Math.random() < 0.9) {
-      runoff.push({
-        side,
-        progress: Math.min(0.94, Math.abs(x - canopy.centerX) / canopy.radiusX),
-        speed: 0.22 + Math.random() * 0.34,
-        x,
-        y,
-        vy: 0,
-        falling: false,
-        alpha: 0.32 + Math.random() * 0.5,
-      });
+      const drop = runoffPool.pop() ?? ({} as RunoffDrop);
+      drop.side = side;
+      drop.progress = Math.min(
+        0.94,
+        Math.abs(x - canopy.centerX) / canopy.radiusX,
+      );
+      drop.speed = 0.22 + Math.random() * 0.34;
+      drop.x = x;
+      drop.y = y;
+      drop.vy = 0;
+      drop.falling = false;
+      drop.alpha = 0.32 + Math.random() * 0.5;
+      runoff.push(drop);
     }
   };
 
   const rebuild = () => {
     const bounds = canvas.getBoundingClientRect();
-    width = Math.max(1, bounds.width);
-    height = Math.max(1, bounds.height);
+    const nextWidth = Math.max(1, bounds.width);
+    const nextHeight = Math.max(1, bounds.height);
+    const nextPixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
+    if (
+      nextWidth === width &&
+      nextHeight === height &&
+      nextPixelRatio === pixelRatio &&
+      rain.length > 0
+    ) {
+      geometryDirty = true;
+      return;
+    }
+    width = nextWidth;
+    height = nextHeight;
+    pixelRatio = nextPixelRatio;
     canvas.width = Math.round(width * pixelRatio);
     canvas.height = Math.round(height * pixelRatio);
     context?.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
@@ -151,9 +177,9 @@ export const createUmbrellaRainCanvas = (
       if (surface !== undefined && drop.y > surface) drop.y = Math.random() * surface;
       rain.push(drop);
     }
-    splashes.length = 0;
-    impactCrowns.length = 0;
-    runoff.length = 0;
+    splashPool.push(...splashes.splice(0));
+    crownPool.push(...impactCrowns.splice(0));
+    runoffPool.push(...runoff.splice(0));
   };
 
   const update = (delta: number) => {
@@ -183,12 +209,18 @@ export const createUmbrellaRainCanvas = (
       drop.x += drop.vx * delta;
       drop.y += drop.vy * delta;
       drop.life -= delta;
-      if (drop.life <= 0) splashes.splice(index, 1);
+      if (drop.life <= 0) {
+        splashPool.push(drop);
+        splashes.splice(index, 1);
+      }
     }
 
     for (let index = impactCrowns.length - 1; index >= 0; index -= 1) {
       impactCrowns[index].life -= delta;
-      if (impactCrowns[index].life <= 0) impactCrowns.splice(index, 1);
+      if (impactCrowns[index].life <= 0) {
+        crownPool.push(impactCrowns[index]);
+        impactCrowns.splice(index, 1);
+      }
     }
 
     for (let index = runoff.length - 1; index >= 0; index -= 1) {
@@ -206,7 +238,10 @@ export const createUmbrellaRainCanvas = (
         drop.vy += 520 * delta;
         drop.y += drop.vy * delta;
       }
-      if (drop.y > height + 30) runoff.splice(index, 1);
+      if (drop.y > height + 30) {
+        runoffPool.push(drop);
+        runoff.splice(index, 1);
+      }
     }
   };
 

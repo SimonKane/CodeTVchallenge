@@ -10,40 +10,51 @@ export interface QualityPreset {
 
 type NavigatorWithMemory = Navigator & { deviceMemory?: number };
 
-const usesSoftwareRenderer = () => {
+interface WebGLCapabilities {
+  supported: boolean;
+  softwareRenderer: boolean;
+}
+
+let cachedCapabilities: WebGLCapabilities | undefined;
+
+const inspectWebGL = (): WebGLCapabilities => {
+  if (cachedCapabilities) return cachedCapabilities;
   try {
     const canvas = document.createElement("canvas");
-    const context = canvas.getContext("webgl2") || canvas.getContext("webgl");
-    if (!context) return false;
+    const options = { failIfMajorPerformanceCaveat: true };
+    const context =
+      canvas.getContext("webgl2", options) || canvas.getContext("webgl", options);
+    if (!context) {
+      cachedCapabilities = { supported: false, softwareRenderer: false };
+      return cachedCapabilities;
+    }
     const extension = context.getExtension("WEBGL_debug_renderer_info");
     const renderer = String(
       extension
         ? context.getParameter(extension.UNMASKED_RENDERER_WEBGL)
         : context.getParameter(context.RENDERER),
     ).toLowerCase();
-    return /swiftshader|llvmpipe|software/.test(renderer);
+    cachedCapabilities = {
+      supported: true,
+      softwareRenderer: /swiftshader|llvmpipe|software/.test(renderer),
+    };
+    context.getExtension("WEBGL_lose_context")?.loseContext();
+    return cachedCapabilities;
   } catch {
-    return false;
+    cachedCapabilities = { supported: false, softwareRenderer: false };
+    return cachedCapabilities;
   }
 };
 
-export const supportsWebGL = () => {
-  try {
-    const canvas = document.createElement("canvas");
-    return Boolean(
-      canvas.getContext("webgl2", { failIfMajorPerformanceCaveat: true }) ||
-        canvas.getContext("webgl", { failIfMajorPerformanceCaveat: true }),
-    );
-  } catch {
-    return false;
-  }
-};
+export const supportsWebGL = () => inspectWebGL().supported;
 
 export const getQualityPreset = (): QualityPreset => {
   const mobile = matchMedia("(max-width: 720px), (pointer: coarse)").matches;
   const memory = (navigator as NavigatorWithMemory).deviceMemory ?? 8;
   const lowPower =
-    memory <= 4 || navigator.hardwareConcurrency <= 4 || usesSoftwareRenderer();
+    memory <= 4 ||
+    navigator.hardwareConcurrency <= 4 ||
+    inspectWebGL().softwareRenderer;
 
   return {
     mobile,

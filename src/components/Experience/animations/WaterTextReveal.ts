@@ -98,7 +98,7 @@ export const createWaterTextReveal = ({
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   const mobile = matchMedia("(max-width: 720px)").matches;
-  const pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
+  let pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
   const definitions = [
     { element: eyebrow, start: 0, end: 0.22, strength: 0.74 },
     ...headingLines.map((element, index) => ({
@@ -122,7 +122,6 @@ export const createWaterTextReveal = ({
   let width = 1;
   let height = 1;
   let currentProgress = 0;
-  let animationFrame: number | undefined;
 
   canvas.className = "experience-water-canvas";
   canvas.setAttribute("aria-hidden", "true");
@@ -130,8 +129,19 @@ export const createWaterTextReveal = ({
 
   const resize = () => {
     const bounds = container.getBoundingClientRect();
-    width = Math.max(1, bounds.width);
-    height = Math.max(1, bounds.height);
+    const nextWidth = Math.max(1, bounds.width);
+    const nextHeight = Math.max(1, bounds.height);
+    const nextPixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
+    if (
+      nextWidth === width &&
+      nextHeight === height &&
+      nextPixelRatio === pixelRatio
+    ) {
+      return;
+    }
+    width = nextWidth;
+    height = nextHeight;
+    pixelRatio = nextPixelRatio;
     canvas.width = Math.round(width * pixelRatio);
     canvas.height = Math.round(height * pixelRatio);
     canvas.style.width = `${width}px`;
@@ -228,29 +238,6 @@ export const createWaterTextReveal = ({
     });
   };
 
-  const stopRain = () => {
-    if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
-    animationFrame = undefined;
-  };
-
-  const animateRain = (time: number) => {
-    animationFrame = undefined;
-    drawWater(currentProgress, time * 0.001);
-    if (currentProgress > 0 && currentProgress < 0.98) {
-      animationFrame = requestAnimationFrame(animateRain);
-    }
-  };
-
-  const syncRainLoop = () => {
-    const active = currentProgress > 0 && currentProgress < 0.98;
-    if (active && animationFrame === undefined) {
-      animationFrame = requestAnimationFrame(animateRain);
-    } else if (!active) {
-      stopRain();
-      context?.clearRect(0, 0, width, height);
-    }
-  };
-
   const updateTarget = (target: RevealTarget, progress: number) => {
     const groupProgress = clamp(
       (progress - target.start) / (target.end - target.start),
@@ -267,37 +254,33 @@ export const createWaterTextReveal = ({
       const dropOpacity =
         (1 - smooth((letterProgress - 0.42) / 0.38)) *
         Math.min(1, visibility * 1.4);
-
-      element.style.opacity = String(visibility);
-      element.style.transform = `translate3d(0, ${(
+      const transform = `translate3d(0, ${(
         -distance *
         (1 - settled)
       ).toFixed(2)}px, 0) scaleX(${(0.12 + glyphShape * 0.88).toFixed(
         3,
       )}) scaleY(${(1.9 - glyphShape * 0.9).toFixed(3)})`;
-      element.style.filter =
+      const filter =
         mobile || letterProgress >= 0.88
           ? "none"
           : `blur(${((1 - glyphShape) * 1.35).toFixed(2)}px)`;
-      element.style.textShadow =
+      const textShadow =
         mobile || letterProgress >= 0.92
           ? "none"
           : `0 0 ${(2 + (1 - glyphShape) * 7).toFixed(
               1,
             )}px rgba(205,231,240,${(0.12 + dropOpacity * 0.34).toFixed(2)})`;
       if (!mobile) {
-        element.style.setProperty(
-          "--rain-trail-opacity",
-          trailOpacity.toFixed(3),
-        );
-        element.style.setProperty(
-          "--rain-drop-opacity",
-          dropOpacity.toFixed(3),
-        );
-        element.style.setProperty(
-          "--rain-trail-height",
-          `${Math.max(5, distance * (1 - settled * 0.72)).toFixed(1)}px`,
-        );
+        element.style.cssText =
+          `opacity:${visibility};transform:${transform};filter:${filter};` +
+          `text-shadow:${textShadow};--rain-trail-opacity:${trailOpacity.toFixed(3)};` +
+          `--rain-drop-opacity:${dropOpacity.toFixed(3)};` +
+          `--rain-trail-height:${Math.max(5, distance * (1 - settled * 0.72)).toFixed(1)}px`;
+      } else {
+        element.style.cssText =
+          `opacity:${visibility};transform:${transform};filter:${filter};` +
+          `text-shadow:${textShadow};--rain-trail-opacity:0;--rain-drop-opacity:0;` +
+          `--rain-trail-height:${distance}px`;
       }
     });
     target.element.classList.toggle(
@@ -310,11 +293,11 @@ export const createWaterTextReveal = ({
     setProgress: (progress) => {
       currentProgress = progress;
       targets.forEach((target) => updateTarget(target, progress));
-      syncRainLoop();
+      drawWater(currentProgress);
     },
     destroy: () => {
       resizeObserver.disconnect();
-      stopRain();
+      context?.clearRect(0, 0, width, height);
       targets.forEach(({ element, originalText }) => {
         element.classList.remove(
           "rain-text-reveal",
