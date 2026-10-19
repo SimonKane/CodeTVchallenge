@@ -13,16 +13,16 @@ const POST_REVEAL_SLOWDOWN = 1.15;
 const UMBRELLA_FADE_TIME = 2.68;
 const UMBRELLA_ENTRANCE_END_TIME = 3.05;
 const UMBRELLA_TEXT_START_DELAY = 0.08;
-const UMBRELLA_TEXT_RAIN_DURATION = 3.2;
-const UMBRELLA_OPENING_DURATION = 3;
+const UMBRELLA_TEXT_RAIN_DURATION = 2.1;
+const UMBRELLA_OPENING_DURATION = 1.8;
 const UMBRELLA_OPENING_PHASE_PROGRESS = 0.72;
-const SEQUENCE_INPUT_RELEASE_DELAY = 320;
-const SEQUENCE_TOUCH_STALE_DELAY = 700;
+const SEQUENCE_INPUT_RELEASE_DELAY = 140;
+const SEQUENCE_TOUCH_STALE_DELAY = 420;
 const SEQUENCE_RESET_HYSTERESIS = 0.03;
 const EDITORIAL_SCROLL_DURATION = 1.66;
 const EDITORIAL_HIGHLIGHT_START_DELAY = 0.035;
-const EDITORIAL_HIGHLIGHT_DURATION = 0.9;
-const EDITORIAL_LIGHTNING_DURATION = 1.4;
+const EDITORIAL_HIGHLIGHT_DURATION = 0.58;
+const EDITORIAL_LIGHTNING_DURATION = 0.82;
 
 const slowPostRevealTime = (time: number) =>
   REVEAL_TRIGGER_TIME +
@@ -32,9 +32,9 @@ const slowPostRevealDuration = (duration: number) =>
   duration * POST_REVEAL_SLOWDOWN;
 
 const getNarrativeScrollDistance = () => {
-  if (matchMedia("(max-width: 720px)").matches) return 5.6;
-  if (matchMedia("(pointer: coarse)").matches) return 8.8;
-  return 10.8;
+  if (matchMedia("(max-width: 720px)").matches) return 7.4;
+  if (matchMedia("(pointer: coarse)").matches) return 11.8;
+  return 14.5;
 };
 
 const getScrollDistance = (baseDistance: number) => {
@@ -71,6 +71,11 @@ interface ScrollBounds {
   end: number;
 }
 
+interface ScrollGovernorController {
+  destroy: () => void;
+  releaseLockedInput: () => void;
+}
+
 const createScrollGovernor = (
   getBounds: () => ScrollBounds | undefined,
   getLockedY: () => number | undefined,
@@ -79,6 +84,7 @@ const createScrollGovernor = (
   const scrollState = { y: scrollY };
   let targetY = scrollY;
   let scrolling = false;
+  let pendingLockedDelta = 0;
 
   const stopScrolling = () => {
     if (!scrolling) return;
@@ -116,10 +122,15 @@ const createScrollGovernor = (
     gsap.ticker.add(updateScroll);
   };
 
-  const queueScroll = (delta: number, event: Event) => {
+  const queueScroll = (delta: number, event?: Event) => {
     const lockedY = getLockedY();
     if (lockedY !== undefined) {
-      onLockedInput(event);
+      if (event) onLockedInput(event);
+      const maxQueuedDelta = innerHeight * 0.9;
+      pendingLockedDelta = Math.max(
+        -maxQueuedDelta,
+        Math.min(maxQueuedDelta, pendingLockedDelta + delta),
+      );
       targetY = lockedY;
       scrollState.y = lockedY;
       scrollTo(0, lockedY);
@@ -223,15 +234,25 @@ const createScrollGovernor = (
   addEventListener("touchcancel", handleTouchBoundary, { passive: true });
   addEventListener("scroll", handleScroll, { passive: true });
 
-  return () => {
-    stopScrolling();
-    removeEventListener("wheel", handleWheel);
-    removeEventListener("keydown", handleKeydown);
-    removeEventListener("touchmove", handleTouchMove);
-    removeEventListener("touchstart", handleTouchBoundary);
-    removeEventListener("touchend", handleTouchBoundary);
-    removeEventListener("touchcancel", handleTouchBoundary);
-    removeEventListener("scroll", handleScroll);
+  return {
+    destroy: () => {
+      stopScrolling();
+      removeEventListener("wheel", handleWheel);
+      removeEventListener("keydown", handleKeydown);
+      removeEventListener("touchmove", handleTouchMove);
+      removeEventListener("touchstart", handleTouchBoundary);
+      removeEventListener("touchend", handleTouchBoundary);
+      removeEventListener("touchcancel", handleTouchBoundary);
+      removeEventListener("scroll", handleScroll);
+    },
+    releaseLockedInput: () => {
+      const delta = pendingLockedDelta;
+      pendingLockedDelta = 0;
+      if (Math.abs(delta) <= 0.5) return;
+      requestAnimationFrame(() => {
+        if (getLockedY() === undefined) queueScroll(delta);
+      });
+    },
   };
 };
 
@@ -239,12 +260,20 @@ const createSequenceLockGuard = (
   getLockedY: () => number | undefined,
   onLockedInput: (event: Event) => void,
 ) => {
+  let pendingLockedDelta = 0;
   const holdLockedPosition = (event?: Event) => {
     if (event instanceof TouchEvent) onLockedInput(event);
     const lockedY = getLockedY();
     if (lockedY === undefined) return;
     if (event && event.type !== "scroll" && !(event instanceof TouchEvent)) {
       onLockedInput(event);
+    }
+    if (event instanceof WheelEvent) {
+      const maxQueuedDelta = innerHeight * 0.9;
+      pendingLockedDelta = Math.max(
+        -maxQueuedDelta,
+        Math.min(maxQueuedDelta, pendingLockedDelta + event.deltaY),
+      );
     }
     if (event?.cancelable) event.preventDefault();
     if (Math.abs(scrollY - lockedY) > 0.5) scrollTo(0, lockedY);
@@ -257,13 +286,23 @@ const createSequenceLockGuard = (
   addEventListener("touchcancel", holdLockedPosition, { passive: false });
   addEventListener("scroll", holdLockedPosition, { passive: true });
 
-  return () => {
-    removeEventListener("wheel", holdLockedPosition);
-    removeEventListener("touchmove", holdLockedPosition);
-    removeEventListener("touchstart", holdLockedPosition);
-    removeEventListener("touchend", holdLockedPosition);
-    removeEventListener("touchcancel", holdLockedPosition);
-    removeEventListener("scroll", holdLockedPosition);
+  return {
+    destroy: () => {
+      removeEventListener("wheel", holdLockedPosition);
+      removeEventListener("touchmove", holdLockedPosition);
+      removeEventListener("touchstart", holdLockedPosition);
+      removeEventListener("touchend", holdLockedPosition);
+      removeEventListener("touchcancel", holdLockedPosition);
+      removeEventListener("scroll", holdLockedPosition);
+    },
+    releaseLockedInput: () => {
+      const delta = pendingLockedDelta;
+      pendingLockedDelta = 0;
+      if (Math.abs(delta) <= 0.5) return;
+      requestAnimationFrame(() => {
+        if (getLockedY() === undefined) scrollBy(0, delta);
+      });
+    },
   };
 };
 
@@ -302,7 +341,7 @@ export const createNarrativeTimeline = (
   let editorialLightningTimeline: gsap.core.Timeline | undefined;
   let umbrellaTextIntroTimeline: gsap.core.Timeline | undefined;
   let scrollNormalizer: { kill: () => void } | undefined;
-  let destroyScrollGovernor: (() => void) | undefined;
+  let scrollGovernor: ScrollGovernorController | undefined;
   let textRevealStarted = false;
   let textRevealComplete = false;
   let editorialHighlightStarted = false;
@@ -362,6 +401,7 @@ export const createNarrativeTimeline = (
     sequenceLockY = undefined;
     sequenceLockProgress = undefined;
     delete chapter.dataset.sequenceLocked;
+    scrollGovernor?.releaseLockedInput();
   };
 
   const scheduleSequenceUnlock = () => {
@@ -970,12 +1010,12 @@ export const createNarrativeTimeline = (
       return trigger ? { start: trigger.start, end: trigger.end } : undefined;
     };
     if (mobileScroll) {
-      destroyScrollGovernor = createSequenceLockGuard(
+      scrollGovernor = createSequenceLockGuard(
         () => sequenceLockY,
         noteLockedInput,
       );
     } else {
-      destroyScrollGovernor = createScrollGovernor(
+      scrollGovernor = createScrollGovernor(
         getBounds,
         () => sequenceLockY,
         noteLockedInput,
@@ -1058,7 +1098,7 @@ export const createNarrativeTimeline = (
         scenePausedForEditorial = false;
       }
       scrollNormalizer?.kill();
-      destroyScrollGovernor?.();
+      scrollGovernor?.destroy();
       if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame);
       ScrollTrigger.removeEventListener(
         "refreshInit",
