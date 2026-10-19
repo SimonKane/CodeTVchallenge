@@ -2,6 +2,8 @@
 
 This project is an interactive homage to [Paraply.org](https://paraply.org/), a Swedish organization. It was created with Paraply's consent.
 
+Technical and visual audit: [Swedish report](docs/audits/2026-10-19-paraply-report-sv.md).
+
 ## Tools
 
 | Tool | Implementation |

@@ -1,7 +1,7 @@
 ---
 import './Hero.css';
-import streetImage from './assets/street.png';
-import childImage from './assets/child.png';
+import streetImage from './assets/street.webp';
+import childImage from './assets/child.webp';
 ---
 
 <section class="hero" aria-labelledby="hero-title">
@@ -9,6 +9,8 @@ import childImage from './assets/child.png';
 		<img
 			class="hero-street"
 			src={streetImage.src}
+			width={streetImage.width}
+			height={streetImage.height}
 			loading="lazy"
 			decoding="async"
 			alt=""
@@ -20,6 +22,8 @@ import childImage from './assets/child.png';
 				<img
 					class="hero-child"
 					src={childImage.src}
+					width={childImage.width}
+					height={childImage.height}
 					loading="lazy"
 					decoding="async"
 					alt=""

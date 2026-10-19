@@ -8,7 +8,7 @@ interface ExperienceInstance {
   narrative: NarrativeController;
   resizeObserver: ResizeObserver;
   handleVisibility: () => void;
-  decodeHandle?: number;
+  decodeTimer?: number;
 }
 
 const instances = new Map<HTMLElement, ExperienceInstance>();
@@ -67,13 +67,7 @@ const destroyExperience = (root: HTMLElement) => {
   instance.narrative.destroy();
   instance.resizeObserver.disconnect();
   document.removeEventListener("visibilitychange", instance.handleVisibility);
-  if (instance.decodeHandle !== undefined) {
-    if ("cancelIdleCallback" in window) {
-      cancelIdleCallback(instance.decodeHandle);
-    } else {
-      cancelAnimationFrame(instance.decodeHandle);
-    }
-  }
+  if (instance.decodeTimer !== undefined) clearTimeout(instance.decodeTimer);
   instance.scene.dispose();
   instances.delete(root);
 };
@@ -169,15 +163,13 @@ const initializeExperience = async (root: HTMLElement) => {
         .querySelectorAll<HTMLImageElement>("img")
         .forEach((image) => void image.decode().catch(() => undefined));
     };
-    const decodeHandle = "requestIdleCallback" in window
-      ? requestIdleCallback(decodeLaterImages, { timeout: 1400 })
-      : requestAnimationFrame(decodeLaterImages);
+    const decodeTimer = window.setTimeout(decodeLaterImages, 5200);
     instances.set(root, {
       scene,
       narrative,
       resizeObserver,
       handleVisibility,
-      decodeHandle,
+      decodeTimer,
     });
     root.dataset.sceneStatus = "ready";
     scene.start();

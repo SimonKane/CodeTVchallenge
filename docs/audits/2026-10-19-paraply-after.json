@@ -1,0 +1,50 @@
+{
+  "environment": {
+    "browser": "Chrome for Testing 156.0.8078.4 (Playwright Chromium/CDP)",
+    "runsPerViewport": 3,
+    "aggregation": "median after a separate warm-up",
+    "renderer": "ANGLE / SwiftShader in headless mode"
+  },
+  "desktop": {
+    "viewport": "1440x1100",
+    "lcpMs": 4564,
+    "cls": 0,
+    "journeyCls": 1,
+    "meanFps": 23.147549463338937,
+    "p95FrameMs": 83.40000000000146,
+    "framesOver50Ms": 216,
+    "longTaskCount": 47,
+    "longTaskTotalMs": 4421,
+    "longestTaskMs": 434,
+    "totalTransferBytes": 1655797,
+    "imageTransferBytes": 1433430
+  },
+  "tablet": {
+    "viewport": "768x1024",
+    "lcpMs": 4544,
+    "cls": 0,
+    "journeyCls": 0.0005244823286100579,
+    "meanFps": 37.94722435390016,
+    "p95FrameMs": 50,
+    "framesOver50Ms": 62,
+    "longTaskCount": 8,
+    "longTaskTotalMs": 1436,
+    "longestTaskMs": 396,
+    "totalTransferBytes": 1655797,
+    "imageTransferBytes": 1433430
+  },
+  "mobile": {
+    "viewport": "390x844",
+    "lcpMs": 4536,
+    "cls": 0,
+    "journeyCls": 0,
+    "meanFps": 51.714000325869044,
+    "p95FrameMs": 33.39999999999782,
+    "framesOver50Ms": 13,
+    "longTaskCount": 10,
+    "longTaskTotalMs": 1224,
+    "longestTaskMs": 360,
+    "totalTransferBytes": 1655797,
+    "imageTransferBytes": 1433430
+  }
+}

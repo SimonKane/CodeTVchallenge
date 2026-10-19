@@ -9,13 +9,20 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "audit": "playwright test tests/audit/paraply.audit.spec.ts",
+    "audit:fallback": "playwright test tests/audit/fallback.audit.spec.ts",
+    "test:audit-unit": "node tests/audit/trace-metrics.test.ts",
+    "audit:summarize": "node scripts/summarize-audit.mjs"
   },
   "dependencies": {
     "@types/three": "^0.185.1",
-    "astro": "^6.3.1",
+    "astro": "^7.4.0",
     "gsap": "^3.15.0",
     "postprocessing": "^6.39.4",
     "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1"
   }
 }

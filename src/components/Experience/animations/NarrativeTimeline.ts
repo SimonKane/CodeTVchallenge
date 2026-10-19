@@ -679,7 +679,13 @@ export const createNarrativeTimeline = (
             resetUmbrellaTextIntro();
           }
         },
-        onLeave: () => syncChapterState(1, true),
+        onLeave: () => {
+          syncChapterState(1, true);
+          if (!scenePausedForEditorial) {
+            scene.pause();
+            scenePausedForEditorial = true;
+          }
+        },
         onEnterBack: (trigger) =>
           syncChapterState(Math.min(1, trigger.progress * 2)),
         onLeaveBack: () => syncChapterState(0),
@@ -904,19 +910,15 @@ export const createNarrativeTimeline = (
                 editorialState.progress,
                 editorialLightningComplete,
               );
-              if (
-                matchMedia("(max-width: 800px), (pointer: coarse)").matches
+              if (editorialState.progress > 0.01 && !scenePausedForEditorial) {
+                scene.pause();
+                scenePausedForEditorial = true;
+              } else if (
+                editorialState.progress <= 0.01 &&
+                scenePausedForEditorial
               ) {
-                if (editorialState.progress > 0.01 && !scenePausedForEditorial) {
-                  scene.pause();
-                  scenePausedForEditorial = true;
-                } else if (
-                  editorialState.progress <= 0.01 &&
-                  scenePausedForEditorial
-                ) {
-                  scene.start();
-                  scenePausedForEditorial = false;
-                }
+                scene.start();
+                scenePausedForEditorial = false;
               }
             }
           },

@@ -74,14 +74,30 @@ const hiddenMessage = "silence";
     </svg>
   </div>
   <div class="experience-chapter-child" data-chapter-child aria-hidden="true">
-    <img src={childLookbackImage.src} alt="" decoding="async" />
+    <img
+      src={childLookbackImage.src}
+      width={childLookbackImage.width}
+      height={childLookbackImage.height}
+      loading="lazy"
+      fetchpriority="low"
+      alt=""
+      decoding="async"
+    />
   </div>
   <div
     class="editorial-final-image"
     data-editorial-final-image
     aria-hidden="true"
   >
-    <img src={hushImage.src} alt="" decoding="async" />
+    <img
+      src={hushImage.src}
+      width={hushImage.width}
+      height={hushImage.height}
+      loading="lazy"
+      fetchpriority="low"
+      alt=""
+      decoding="async"
+    />
   </div>
   <div
     class="editorial-hidden-message"
@@ -152,6 +168,10 @@ const hiddenMessage = "silence";
         class="umbrella-chapter__image umbrella-chapter__image--closed"
         data-umbrella-closed
         src={closedUmbrellaImage.src}
+        width={closedUmbrellaImage.width}
+        height={closedUmbrellaImage.height}
+        loading="lazy"
+        fetchpriority="low"
         alt=""
         decoding="async"
       />
@@ -159,6 +179,10 @@ const hiddenMessage = "silence";
         class="umbrella-chapter__sheltered-child"
         data-umbrella-sheltered-child
         src={withoutHoodImage.src}
+        width={withoutHoodImage.width}
+        height={withoutHoodImage.height}
+        loading="lazy"
+        fetchpriority="low"
         alt=""
         decoding="async"
       />
@@ -166,6 +190,10 @@ const hiddenMessage = "silence";
         class="umbrella-chapter__image umbrella-chapter__image--open"
         data-umbrella-open
         src={openUmbrellaImage.src}
+        width={openUmbrellaImage.width}
+        height={openUmbrellaImage.height}
+        loading="lazy"
+        fetchpriority="low"
         alt=""
         decoding="async"
       />

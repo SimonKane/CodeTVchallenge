@@ -22,3 +22,8 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+
+# browser audit output
+audit-results/
+playwright-report/
+test-results/

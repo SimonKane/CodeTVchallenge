@@ -1,6 +1,7 @@
 export interface QualityPreset {
   mobile: boolean;
   lowPower: boolean;
+  softwareRenderer: boolean;
   pixelRatio: number;
   rainCount: number;
   wordParticles: number;
@@ -51,18 +52,23 @@ export const supportsWebGL = () => inspectWebGL().supported;
 export const getQualityPreset = (): QualityPreset => {
   const mobile = matchMedia("(max-width: 720px), (pointer: coarse)").matches;
   const memory = (navigator as NavigatorWithMemory).deviceMemory ?? 8;
+  const softwareRenderer = inspectWebGL().softwareRenderer;
   const lowPower =
     memory <= 4 ||
     navigator.hardwareConcurrency <= 4 ||
-    inspectWebGL().softwareRenderer;
+    softwareRenderer;
 
   return {
     mobile,
     lowPower,
-    pixelRatio: Math.min(devicePixelRatio || 1, mobile ? 1 : lowPower ? 1.25 : 1.7),
-    rainCount: mobile ? 650 : lowPower ? 1450 : 2400,
-    wordParticles: mobile ? 600 : 1440,
-    fogLayers: mobile ? 2 : lowPower ? 3 : 5,
+    softwareRenderer,
+    pixelRatio: Math.min(
+      devicePixelRatio || 1,
+      softwareRenderer ? 0.5 : mobile ? 1 : lowPower ? 1.25 : 1.7,
+    ),
+    rainCount: softwareRenderer ? 400 : mobile ? 650 : lowPower ? 1450 : 2400,
+    wordParticles: mobile || softwareRenderer ? 600 : 1440,
+    fogLayers: softwareRenderer ? 1 : mobile ? 2 : lowPower ? 3 : 5,
     postProcessing: !lowPower && !mobile,
   };
 };
