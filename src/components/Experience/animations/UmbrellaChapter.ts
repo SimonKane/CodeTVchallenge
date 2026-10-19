@@ -321,7 +321,7 @@ export const createUmbrellaChapter = (
           : entranceProgress * BACKGROUND_READY_TIME;
     experienceChapter?.classList.toggle(
       "experience-chapter--umbrella-active",
-      entranceProgress >= 0.98 || textIntroProgress > 0 || requestedProgress > 0,
+      entranceProgress >= 0.98 || requestedProgress > 0,
     );
     timeline.time(effectiveTime, false);
     const canopyIsMoving = effectiveTime >= 2.78 && effectiveTime <= 3.44;

@@ -16,7 +16,9 @@ const EDITORIAL_TRANSFORM_DURATION = 0.6;
 const EDITORIAL_LIGHTNING_START = 1.92;
 const EDITORIAL_LIGHTNING_DURATION = 0.3;
 const UMBRELLA_TRANSITION_START = 2.5;
-const UMBRELLA_CROSSFADE_DURATION = 0.3;
+const UMBRELLA_CROSSFADE_DURATION = 0.65;
+const UMBRELLA_TEXT_INTRO_DELAY = 0.45;
+const UMBRELLA_TEXT_INTRO_DURATION = 0.55;
 const UMBRELLA_FINISH_DURATION = 0.32;
 const WHEEL_INPUT_SCALE = 0.58;
 const SCROLL_RESPONSE_MS = 115;
@@ -670,14 +672,14 @@ export const createNarrativeTimeline = (
           umbrellaTextIntroState,
           {
             progress: 1,
-            duration: UMBRELLA_CROSSFADE_DURATION,
+            duration: UMBRELLA_TEXT_INTRO_DURATION,
             ease: "none",
             onUpdate: () =>
               umbrellaTransformation.setTextIntroProgress(
                 umbrellaTextIntroState.progress,
               ),
           },
-          UMBRELLA_TRANSITION_START,
+          UMBRELLA_TRANSITION_START + UMBRELLA_TEXT_INTRO_DELAY,
         )
         .to(
           umbrellaState,
@@ -688,7 +690,9 @@ export const createNarrativeTimeline = (
             onUpdate: () =>
               umbrellaTransformation.setProgress(umbrellaState.progress),
           },
-          UMBRELLA_TRANSITION_START + UMBRELLA_CROSSFADE_DURATION,
+          UMBRELLA_TRANSITION_START +
+            UMBRELLA_TEXT_INTRO_DELAY +
+            UMBRELLA_TEXT_INTRO_DURATION,
         );
     }
 

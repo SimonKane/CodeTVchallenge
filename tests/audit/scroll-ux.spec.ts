@@ -70,20 +70,38 @@ test("the SILENCE to umbrella crossfade never locks scrolling", async ({
   const scene = page.locator("[data-cinematic-scene]");
   const chapter = page.locator("[data-experience-chapter]");
   const umbrellaStage = page.locator("[data-umbrella-stage]");
+  const silenceMessage = page.locator("[data-editorial-hidden-message]");
   const safeTitle = page.locator("#umbrella-safe-title");
   await expect(scene).toHaveAttribute("data-scene-status", "ready", {
     timeout: 30_000,
   });
   await page.waitForTimeout(5_500);
 
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    await page.mouse.wheel(0, 480);
-    await page.waitForTimeout(100);
+  let hasVisibleCrossfade = false;
+  for (let attempt = 0; attempt < 180; attempt += 1) {
+    await page.mouse.wheel(0, 120);
+    await page.waitForTimeout(50);
     expect(await chapter.getAttribute("data-sequence-locked")).not.toBe("true");
-    if (Number(await umbrellaStage.evaluate((node) => getComputedStyle(node).opacity)) > 0.05) {
+    const [umbrellaOpacity, silenceOpacity] = await Promise.all([
+      umbrellaStage.evaluate((node) => Number(getComputedStyle(node).opacity)),
+      silenceMessage.evaluate((node) => Number(getComputedStyle(node).opacity)),
+    ]);
+    if (
+      umbrellaOpacity > 0.35 &&
+      umbrellaOpacity < 0.65 &&
+      silenceOpacity > 0.35 &&
+      silenceOpacity < 0.65
+    ) {
+      hasVisibleCrossfade = true;
       break;
     }
   }
+
+  expect(hasVisibleCrossfade).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("silence-umbrella-crossfade.png"),
+    fullPage: false,
+  });
 
   const transitionStartY = await page.evaluate(() => scrollY);
   for (let step = 0; step < 12; step += 1) {
