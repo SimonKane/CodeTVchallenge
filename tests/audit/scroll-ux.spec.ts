@@ -78,3 +78,25 @@ test("wheel intent during the SILENCE transition is carried forward", async ({
 
   expect(await page.evaluate(() => scrollY)).toBeGreaterThan(lockedY + 100);
 });
+
+test("one wheel gesture advances the narrative without jumping", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "Desktop wheel regression");
+
+  await page.goto("/", { waitUntil: "networkidle" });
+  await expect(page.locator("[data-cinematic-scene]")).toHaveAttribute(
+    "data-scene-status",
+    "ready",
+    { timeout: 30_000 },
+  );
+  await page.waitForTimeout(5_500);
+
+  const startY = await page.evaluate(() => scrollY);
+  await page.mouse.wheel(0, 480);
+  await page.waitForTimeout(900);
+  const travelled = (await page.evaluate(() => scrollY)) - startY;
+
+  expect(travelled).toBeGreaterThan(180);
+  expect(travelled).toBeLessThan(360);
+});

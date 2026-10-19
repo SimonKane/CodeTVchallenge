@@ -23,6 +23,11 @@ const EDITORIAL_SCROLL_DURATION = 1.66;
 const EDITORIAL_HIGHLIGHT_START_DELAY = 0.035;
 const EDITORIAL_HIGHLIGHT_DURATION = 0.58;
 const EDITORIAL_LIGHTNING_DURATION = 0.82;
+const WHEEL_INPUT_SCALE = 0.58;
+const SCROLL_RESPONSE_MS = 115;
+const MAX_SCROLL_STEP_VIEWPORTS = 0.62;
+const MAX_SCROLL_LEAD_VIEWPORTS = 0.82;
+const MAX_LOCKED_DELTA_VIEWPORTS = 0.3;
 
 const slowPostRevealTime = (time: number) =>
   REVEAL_TRIGGER_TIME +
@@ -111,7 +116,7 @@ const createScrollGovernor = (
     }
 
     const frameTime = Math.min(34, Math.max(0, deltaTime || 16.67));
-    const blend = 1 - Math.exp(-frameTime / 65);
+    const blend = 1 - Math.exp(-frameTime / SCROLL_RESPONSE_MS);
     scrollState.y += difference * blend;
     scrollTo(0, scrollState.y);
   }
@@ -126,7 +131,7 @@ const createScrollGovernor = (
     const lockedY = getLockedY();
     if (lockedY !== undefined) {
       if (event) onLockedInput(event);
-      const maxQueuedDelta = innerHeight * 0.9;
+      const maxQueuedDelta = innerHeight * MAX_LOCKED_DELTA_VIEWPORTS;
       pendingLockedDelta = Math.max(
         -maxQueuedDelta,
         Math.min(maxQueuedDelta, pendingLockedDelta + delta),
@@ -153,8 +158,8 @@ const createScrollGovernor = (
     }
 
     const viewport = innerHeight;
-    const maxStep = viewport * 1.15;
-    const maxLead = viewport * 1.45;
+    const maxStep = viewport * MAX_SCROLL_STEP_VIEWPORTS;
+    const maxLead = viewport * MAX_SCROLL_LEAD_VIEWPORTS;
     const scaledDelta = Math.sign(delta) * Math.min(Math.abs(delta), maxStep);
     const queuedFrom = scrolling ? targetY : currentY;
     targetY = Math.min(
@@ -178,7 +183,9 @@ const createScrollGovernor = (
         : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
           ? innerHeight
           : 1;
-    if (queueScroll(event.deltaY * modeMultiplier, event)) event.preventDefault();
+    if (queueScroll(event.deltaY * modeMultiplier * WHEEL_INPUT_SCALE, event)) {
+      event.preventDefault();
+    }
   };
 
   const handleKeydown = (event: KeyboardEvent) => {
@@ -261,6 +268,8 @@ const createSequenceLockGuard = (
   onLockedInput: (event: Event) => void,
 ) => {
   let pendingLockedDelta = 0;
+  const releaseState = { y: scrollY };
+  let releaseTween: gsap.core.Tween | undefined;
   const holdLockedPosition = (event?: Event) => {
     if (event instanceof TouchEvent) onLockedInput(event);
     const lockedY = getLockedY();
@@ -269,10 +278,13 @@ const createSequenceLockGuard = (
       onLockedInput(event);
     }
     if (event instanceof WheelEvent) {
-      const maxQueuedDelta = innerHeight * 0.9;
+      const maxQueuedDelta = innerHeight * MAX_LOCKED_DELTA_VIEWPORTS;
       pendingLockedDelta = Math.max(
         -maxQueuedDelta,
-        Math.min(maxQueuedDelta, pendingLockedDelta + event.deltaY),
+        Math.min(
+          maxQueuedDelta,
+          pendingLockedDelta + event.deltaY * WHEEL_INPUT_SCALE,
+        ),
       );
     }
     if (event?.cancelable) event.preventDefault();
@@ -288,6 +300,7 @@ const createSequenceLockGuard = (
 
   return {
     destroy: () => {
+      releaseTween?.kill();
       removeEventListener("wheel", holdLockedPosition);
       removeEventListener("touchmove", holdLockedPosition);
       removeEventListener("touchstart", holdLockedPosition);
@@ -299,8 +312,22 @@ const createSequenceLockGuard = (
       const delta = pendingLockedDelta;
       pendingLockedDelta = 0;
       if (Math.abs(delta) <= 0.5) return;
-      requestAnimationFrame(() => {
-        if (getLockedY() === undefined) scrollBy(0, delta);
+      releaseTween?.kill();
+      releaseState.y = scrollY;
+      releaseTween = gsap.to(releaseState, {
+        y: scrollY + delta,
+        duration: 0.42,
+        ease: "power2.out",
+        onUpdate: () => {
+          if (getLockedY() !== undefined) {
+            releaseTween?.kill();
+            return;
+          }
+          scrollTo(0, releaseState.y);
+        },
+        onComplete: () => {
+          releaseTween = undefined;
+        },
       });
     },
   };

@@ -64,11 +64,11 @@ export const getQualityPreset = (): QualityPreset => {
     softwareRenderer,
     pixelRatio: Math.min(
       devicePixelRatio || 1,
-      softwareRenderer ? 0.5 : mobile ? 1 : lowPower ? 1.25 : 1.7,
+      softwareRenderer ? 0.5 : mobile ? 1 : lowPower ? 1.15 : 1.4,
     ),
-    rainCount: softwareRenderer ? 400 : mobile ? 650 : lowPower ? 1450 : 2400,
+    rainCount: softwareRenderer ? 400 : mobile ? 650 : lowPower ? 1100 : 1800,
     wordParticles: mobile || softwareRenderer ? 600 : 1440,
-    fogLayers: softwareRenderer ? 1 : mobile ? 2 : lowPower ? 3 : 5,
+    fogLayers: softwareRenderer ? 1 : mobile ? 2 : lowPower ? 2 : 4,
     postProcessing: !lowPower && !mobile,
   };
 };
