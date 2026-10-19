@@ -54,6 +54,7 @@ Environment: production build, Chrome for Testing 156.0.8078.4 through Playwrigh
 
 - LCP is the second hero title span and occurs at 4.54–5.22 seconds because the authored intro reveals it at timeline time 4.35 seconds over 0.72 seconds. Changing this would alter the intended pacing, so it was measured but not automatically changed.
 - The desktop journey-only CLS value of 1.0 occurs exactly when ScrollTrigger releases the full-viewport pinned canvas at the end of the sequence. A CSS attempt to reserve the overlap in advance neither changed the metric nor preserved the final composition, so it was reverted. Initial/navigation CLS remains 0; this intentional transition is reported rather than disguised.
+- Astro reports one 666.6 KB minified Experience chunk before transfer compression. The complete measured non-image transfer is about 222 KB, and splitting the tightly ordered GSAP/Three.js sequence was not justified by a verified startup bottleneck in this pass. Treat route-level code splitting as a future architectural experiment, not an automatic fix.
 
 ## Manual factual/legal review — no automatic edits
 

@@ -24,6 +24,8 @@ Inga konsolfel, misslyckade förstapartsanrop eller horisontella överflöden hi
 
 LCP styrs av den avsedda 4,35-sekunders hero-introduktionen och har därför inte kortats genom att ändra animationens timing. Desktopvärdet `journey CLS = 1` inträffar vid den avsedda ScrollTrigger-frigöringen av den pinnade helskärmsduken; navigation CLS är 0. Ett CSS-försök gav ingen mätbar förbättring och ändrade slutkompositionen, så det återställdes.
 
+Bygget varnar även för en 666,6 KB stor minifierad Experience-chunk före transferkomprimering. Den uppmätta totala icke-bildöverföringen är cirka 222 KB. Koddelning av den tätt ordnade GSAP/Three.js-sekvensen lämnas därför som ett framtida arkitekturexperiment, inte som en verifierad automatisk åtgärd.
+
 ## Manuell faktakontroll krävs
 
 Ingen statistik eller juridisk utfästelse ändrades. Följande texter bör verifieras manuellt mot källa och faktisk tjänsteprocess: “1 in 3 children…”, anonymitetslöftet samt påståendet att alla samtal och chattar är konfidentiella.
