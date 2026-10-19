@@ -1,15 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-async function advanceToSequenceLock(page: import("@playwright/test").Page) {
-  const chapter = page.locator("[data-experience-chapter]");
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    await page.mouse.wheel(0, 420);
-    await page.waitForTimeout(100);
-    if ((await chapter.getAttribute("data-sequence-locked")) === "true") return;
-  }
-  throw new Error("Narrative sequence lock was not reached");
-}
-
 test("narrative pacing and sheltered child composition stay readable", async ({
   page,
 }, testInfo) => {
@@ -41,42 +31,12 @@ test("narrative pacing and sheltered child composition stay readable", async ({
     })(),
   }));
 
-  expect(pacing.scrollViewports).toBeGreaterThan(15);
+  expect(pacing.scrollViewports).toBeGreaterThan(8);
+  expect(pacing.scrollViewports).toBeLessThan(11);
   expect(pacing.child).toBeDefined();
   expect(pacing.child?.blendMode).toBe("normal");
   expect(pacing.child?.topRatio).toBeLessThan(0.36);
   expect(pacing.child?.aspectRatio).toBeGreaterThan(0.6);
-});
-
-test("wheel intent during the SILENCE transition is carried forward", async ({
-  page,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop", "Desktop wheel regression");
-
-  await page.goto("/", { waitUntil: "networkidle" });
-  const scene = page.locator("[data-cinematic-scene]");
-  const chapter = page.locator("[data-experience-chapter]");
-  await expect(scene).toHaveAttribute("data-scene-status", "ready", {
-    timeout: 30_000,
-  });
-  await page.waitForTimeout(5_500);
-
-  await advanceToSequenceLock(page);
-  await expect(chapter).not.toHaveAttribute("data-sequence-locked", "true", {
-    timeout: 5_000,
-  });
-  await advanceToSequenceLock(page);
-
-  const lockedY = await page.evaluate(() => scrollY);
-  await page.mouse.wheel(0, 480);
-  await page.mouse.wheel(0, 480);
-  await page.mouse.wheel(0, 480);
-  await expect(chapter).not.toHaveAttribute("data-sequence-locked", "true", {
-    timeout: 4_000,
-  });
-  await page.waitForTimeout(900);
-
-  expect(await page.evaluate(() => scrollY)).toBeGreaterThan(lockedY + 100);
 });
 
 test("one wheel gesture advances the narrative without jumping", async ({
@@ -99,4 +59,41 @@ test("one wheel gesture advances the narrative without jumping", async ({
 
   expect(travelled).toBeGreaterThan(180);
   expect(travelled).toBeLessThan(360);
+});
+
+test("the SILENCE to umbrella crossfade never locks scrolling", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "Desktop wheel regression");
+
+  await page.goto("/", { waitUntil: "networkidle" });
+  const scene = page.locator("[data-cinematic-scene]");
+  const chapter = page.locator("[data-experience-chapter]");
+  const umbrellaStage = page.locator("[data-umbrella-stage]");
+  const safeTitle = page.locator("#umbrella-safe-title");
+  await expect(scene).toHaveAttribute("data-scene-status", "ready", {
+    timeout: 30_000,
+  });
+  await page.waitForTimeout(5_500);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    await page.mouse.wheel(0, 480);
+    await page.waitForTimeout(100);
+    expect(await chapter.getAttribute("data-sequence-locked")).not.toBe("true");
+    if (Number(await umbrellaStage.evaluate((node) => getComputedStyle(node).opacity)) > 0.05) {
+      break;
+    }
+  }
+
+  const transitionStartY = await page.evaluate(() => scrollY);
+  for (let step = 0; step < 12; step += 1) {
+    await page.mouse.wheel(0, 480);
+    await page.waitForTimeout(120);
+    expect(await chapter.getAttribute("data-sequence-locked")).not.toBe("true");
+    if (Number(await safeTitle.evaluate((node) => getComputedStyle(node).opacity)) > 0.9) {
+      break;
+    }
+  }
+  const transitionDistance = (await page.evaluate(() => scrollY)) - transitionStartY;
+  expect(transitionDistance).toBeLessThan((await page.evaluate(() => innerHeight)) * 2.3);
 });
