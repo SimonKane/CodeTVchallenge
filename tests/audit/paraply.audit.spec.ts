@@ -62,10 +62,17 @@ test("complete Paraply narrative audit", async ({ page, browser }, testInfo) => 
   let reachedFinal = false;
   let preIntroTransferBytes = 0;
   let preIntroImageTransferBytes = 0;
+  let initialMaxScroll = 0;
+  let firstWheelDistancePx = 0;
+  const maxScrollSamples: number[] = [];
   try {
     await page.goto("/", { waitUntil: "networkidle" });
     const scene = page.locator("[data-cinematic-scene]");
     await expect(scene).toHaveAttribute("data-scene-status", /ready|fallback/, { timeout: 30_000 });
+    initialMaxScroll = await page.evaluate(
+      () => document.documentElement.scrollHeight - innerHeight,
+    );
+    maxScrollSamples.push(initialMaxScroll);
     const preIntroResources = await page.evaluate(() =>
       performance.getEntriesByType("resource").map((entry) => {
         const resource = entry as PerformanceResourceTiming;
@@ -94,7 +101,17 @@ test("complete Paraply narrative audit", async ({ page, browser }, testInfo) => 
       window.__auditStartFrames?.();
     });
 
-    const checkpointTargets = [0.25, 0.5, 0.75, 0.98];
+    const checkpointTargets = [
+      { progress: 0.12, name: "01-hero-exit" },
+      { progress: 0.22, name: "02-water-entry" },
+      { progress: 0.32, name: "03-water-readable" },
+      { progress: 0.48, name: "04-editorial" },
+      { progress: 0.62, name: "05-silence" },
+      { progress: 0.73, name: "06-crossfade" },
+      { progress: 0.82, name: "07-umbrella-problem" },
+      { progress: 0.9, name: "08-umbrella-opening" },
+      { progress: 0.95, name: "09-safe-place" },
+    ];
     let nextCheckpoint = 0;
     for (let step = 0; step < 500; step += 1) {
       const sequenceLocked = await page.locator("[data-experience-chapter]").getAttribute("data-sequence-locked");
@@ -102,14 +119,31 @@ test("complete Paraply narrative audit", async ({ page, browser }, testInfo) => 
         await page.waitForTimeout(250);
         continue;
       }
-      await page.mouse.wheel(0, 480);
+      const beforeWheel = await page.evaluate(() => scrollY);
+      await page.mouse.wheel(0, firstWheelDistancePx === 0 ? 480 : 240);
       await page.waitForTimeout(80);
+      const afterWheel = await page.evaluate(() => scrollY);
+      if (firstWheelDistancePx === 0 && afterWheel > beforeWheel) {
+        firstWheelDistancePx = afterWheel - beforeWheel;
+      }
       const progress = await page.evaluate(() => {
         const maximum = Math.max(1, document.documentElement.scrollHeight - innerHeight);
         return scrollY / maximum;
       });
-      if (nextCheckpoint < checkpointTargets.length && progress >= checkpointTargets[nextCheckpoint]) {
-        await captureCheckpoint(page, resultDirectory, `${String(nextCheckpoint + 1).padStart(2, "0")}-${Math.round(checkpointTargets[nextCheckpoint] * 100)}`);
+      maxScrollSamples.push(
+        await page.evaluate(
+          () => document.documentElement.scrollHeight - innerHeight,
+        ),
+      );
+      while (
+        nextCheckpoint < checkpointTargets.length &&
+        progress >= checkpointTargets[nextCheckpoint].progress
+      ) {
+        await captureCheckpoint(
+          page,
+          resultDirectory,
+          checkpointTargets[nextCheckpoint].name,
+        );
         nextCheckpoint += 1;
       }
       const finished = await page.locator("#umbrella-safe-title").evaluate((element) => {
@@ -124,7 +158,7 @@ test("complete Paraply narrative audit", async ({ page, browser }, testInfo) => 
     }
     await page.waitForTimeout(500);
     await page.evaluate(() => window.__auditStopFrames?.());
-    await captureCheckpoint(page, resultDirectory, "05-final");
+    await captureCheckpoint(page, resultDirectory, "10-final");
   } finally {
     traceContents = await stopTracing(cdp);
   }
@@ -200,6 +234,10 @@ test("complete Paraply narrative audit", async ({ page, browser }, testInfo) => 
     browserVersion: browser.version(),
     url: page.url(),
     reachedFinal,
+    initialMaxScroll,
+    firstWheelDistancePx,
+    maxScrollRangePx:
+      Math.max(...maxScrollSamples) - Math.min(...maxScrollSamples),
     lcpMs: browserState.lcpMs,
     lcpElement: browserState.lcpElement,
     cls: browserState.navigationCls,

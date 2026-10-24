@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const externalBaseUrl = process.env.PARAPLY_TEST_BASE_URL;
+const baseURL = externalBaseUrl ?? "http://127.0.0.1:4321";
+
 export default defineConfig({
   testDir: "./tests/audit",
   fullyParallel: false,
@@ -8,7 +11,8 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   reporter: "line",
   use: {
-    baseURL: "http://127.0.0.1:4321",
+    baseURL,
+    channel: "chrome",
     launchOptions: {
       args: ["--disable-crash-reporter", "--disable-features=Crashpad"],
     },
@@ -31,10 +35,12 @@ export default defineConfig({
       use: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true },
     },
   ],
-  webServer: {
-    command: "npm run build && npm run preview -- --host 127.0.0.1 --port 4321",
-    url: "http://127.0.0.1:4321",
-    reuseExistingServer: true,
-    timeout: 120_000,
-  },
+  webServer: externalBaseUrl
+    ? undefined
+    : {
+        command: "npm run build && vite preview --host 127.0.0.1 --port 4321",
+        url: baseURL,
+        reuseExistingServer: true,
+        timeout: 120_000,
+      },
 });

@@ -1,5 +1,9 @@
 import { initializeHero } from "../Hero/Hero";
 import { createNarrativeTimeline, type NarrativeController } from "./animations/NarrativeTimeline";
+import {
+  createStaticUmbrellaInteraction,
+  type UmbrellaInteractionController,
+} from "./animations/UmbrellaChapter";
 import { ExperienceScene } from "./webgl/ExperienceScene";
 import { getQualityPreset, supportsWebGL } from "./webgl/QualityManager";
 
@@ -12,6 +16,7 @@ interface ExperienceInstance {
 }
 
 const instances = new Map<HTMLElement, ExperienceInstance>();
+const fallbackInteractions = new Map<HTMLElement, UmbrellaInteractionController>();
 const initializing = new WeakSet<HTMLElement>();
 
 const resetScrollOnReload = () => {
@@ -52,8 +57,13 @@ const findChapter = (root: HTMLElement) => {
 
 const activateFallback = (root: HTMLElement, staticMode = false) => {
   const fallback = findFallback(root);
+  const chapter = findChapter(root);
   root.dataset.sceneStatus = "fallback";
   root.hidden = true;
+  chapter?.classList.add("experience-chapter--fallback");
+  if (chapter && !fallbackInteractions.has(root)) {
+    fallbackInteractions.set(root, createStaticUmbrellaInteraction(chapter));
+  }
   if (!fallback) return;
   fallback.hidden = false;
   fallback.dataset.active = staticMode ? "static" : "true";
@@ -62,6 +72,8 @@ const activateFallback = (root: HTMLElement, staticMode = false) => {
 };
 
 const destroyExperience = (root: HTMLElement) => {
+  fallbackInteractions.get(root)?.destroy();
+  fallbackInteractions.delete(root);
   const instance = instances.get(root);
   if (!instance) return;
   instance.narrative.destroy();
@@ -86,6 +98,7 @@ const initializeExperience = async (root: HTMLElement) => {
   const titleFirst = root.querySelector<HTMLElement>("[data-title-first]");
   const titleSecond = root.querySelector<HTMLElement>("[data-title-second]");
   const chapter = findChapter(root);
+  chapter?.classList.remove("experience-chapter--fallback");
   const transitionFlash = chapter?.querySelector<HTMLElement>(
     "[data-transition-flash]",
   );
@@ -153,7 +166,10 @@ const initializeExperience = async (root: HTMLElement) => {
       },
       scene,
     );
-    const resizeObserver = new ResizeObserver(() => scene.resize());
+    const resizeObserver = new ResizeObserver(() => {
+      scene.resize();
+      narrative.refresh();
+    });
     resizeObserver.observe(root);
     const handleVisibility = () =>
       document.hidden ? scene.pause() : scene.start();
@@ -181,7 +197,10 @@ const initializeExperience = async (root: HTMLElement) => {
   }
 };
 
-const destroyExperiences = () => [...instances.keys()].forEach(destroyExperience);
+const destroyExperiences = () => {
+  const roots = new Set([...instances.keys(), ...fallbackInteractions.keys()]);
+  roots.forEach(destroyExperience);
+};
 
 const initializeExperiences = async () => {
   const roots = [

@@ -8,6 +8,10 @@ export interface UmbrellaChapterController {
   destroy: () => void;
 }
 
+export interface UmbrellaInteractionController {
+  destroy: () => void;
+}
+
 interface PushVector {
   x: number;
   y: number;
@@ -20,7 +24,47 @@ const clamp = (value: number) => Math.min(1, Math.max(0, value));
 const BACKGROUND_READY_TIME = 0.6;
 const TEXT_SETTLED_TIME = 2.66;
 const UMBRELLA_OPEN_READY_TIME = 3.44;
+const INTERACTION_REVEAL_TIME = 4.32;
 const OPENING_INTRO_PROGRESS = 0.72;
+const AUTO_OPEN_PORTION = 0.28;
+
+export const createStaticUmbrellaInteraction = (
+  chapter: HTMLElement,
+): UmbrellaInteractionController => {
+  const umbrellaChapter = chapter.matches("[data-umbrella-chapter]")
+    ? chapter
+    : chapter.querySelector<HTMLElement>("[data-umbrella-chapter]");
+  const openControl = umbrellaChapter?.querySelector<HTMLButtonElement>(
+    "[data-umbrella-open-control]",
+  );
+  const status = umbrellaChapter?.querySelector<HTMLElement>(
+    "[data-umbrella-status]",
+  );
+  if (!umbrellaChapter || !openControl || !status) {
+    return { destroy: () => undefined };
+  }
+
+  const open = () => {
+    umbrellaChapter.classList.add("umbrella-chapter--opened");
+    openControl.setAttribute("aria-expanded", "true");
+    openControl.tabIndex = -1;
+    status.textContent = "The umbrella is open. Welcome to a safe place.";
+  };
+
+  umbrellaChapter.classList.add("umbrella-chapter--control-visible");
+  openControl.tabIndex = 0;
+  openControl.addEventListener("click", open);
+
+  return {
+    destroy: () => {
+      openControl.removeEventListener("click", open);
+      umbrellaChapter.classList.remove(
+        "umbrella-chapter--control-visible",
+        "umbrella-chapter--opened",
+      );
+    },
+  };
+};
 
 const splitIntoRainCharacters = (element: HTMLElement) => {
   const textNodes: Text[] = [];
@@ -108,6 +152,10 @@ export const createUmbrellaChapter = (
   const exposure = chapter.querySelector<HTMLElement>(
     "[data-umbrella-exposure]",
   );
+  const openControl = chapter.querySelector<HTMLButtonElement>(
+    "[data-umbrella-open-control]",
+  );
+  const status = chapter.querySelector<HTMLElement>("[data-umbrella-status]");
 
   if (
     !stage ||
@@ -118,7 +166,9 @@ export const createUmbrellaChapter = (
     !safeCopy ||
     !shelteredChild ||
     !shelterGlow ||
-    !exposure
+    !exposure ||
+    !openControl ||
+    !status
   ) {
     return {
       setEntranceProgress: () => undefined,
@@ -139,10 +189,33 @@ export const createUmbrellaChapter = (
   const pushVectors = createPushVectors(rainCharacters, stage);
   const rainCanvas = createUmbrellaRainCanvas(canopyRain, openUmbrella);
   const rainState = { visibility: 0 };
+  const interactionState = { progress: 0 };
   let entranceProgress = 0;
   let requestedProgress = 0;
   let textIntroProgress = 0;
   let previousEffectiveTime = -1;
+  let openedByUser = false;
+  let renderProgress = () => undefined;
+
+  const openFromInteraction = () => {
+    if (openedByUser) return;
+    openedByUser = true;
+    chapter.classList.add("umbrella-chapter--interaction-requested");
+    openControl.setAttribute("aria-expanded", "true");
+    status.textContent = "The umbrella is opening. Welcome to a safe place.";
+    gsap.to(interactionState, {
+      progress: 1,
+      duration: 0.86,
+      ease: "power3.inOut",
+      overwrite: true,
+      onUpdate: () => renderProgress(),
+      onComplete: () => {
+        status.textContent = "The umbrella is open. Welcome to a safe place.";
+      },
+    });
+  };
+
+  openControl.addEventListener("click", openFromInteraction);
 
   gsap.set(stage, { opacity: 0 });
   gsap.set(closedUmbrella, {
@@ -303,22 +376,62 @@ export const createUmbrellaChapter = (
   // Warm all CSSPlugin property renderers before the umbrella is visible.
   timeline.progress(1, true).progress(0, true);
 
-  const renderProgress = () => {
+  renderProgress = () => {
     const timelineDuration = timeline.duration();
-    const effectiveTime =
-      textIntroProgress >= 1
-        ? UMBRELLA_OPEN_READY_TIME +
-          requestedProgress * (timelineDuration - UMBRELLA_OPEN_READY_TIME)
-        : textIntroProgress > OPENING_INTRO_PROGRESS
-          ? TEXT_SETTLED_TIME +
-            ((textIntroProgress - OPENING_INTRO_PROGRESS) /
-              (1 - OPENING_INTRO_PROGRESS)) *
-              (UMBRELLA_OPEN_READY_TIME - TEXT_SETTLED_TIME)
-          : textIntroProgress > 0
-          ? BACKGROUND_READY_TIME +
-            (textIntroProgress / OPENING_INTRO_PROGRESS) *
-              (TEXT_SETTLED_TIME - BACKGROUND_READY_TIME)
-          : entranceProgress * BACKGROUND_READY_TIME;
+    const textTime = textIntroProgress > 0
+      ? BACKGROUND_READY_TIME +
+        (textIntroProgress / OPENING_INTRO_PROGRESS) *
+          (TEXT_SETTLED_TIME - BACKGROUND_READY_TIME)
+      : entranceProgress * BACKGROUND_READY_TIME;
+    const settledTextTime = Math.min(TEXT_SETTLED_TIME, textTime);
+    const autoOpenProgress = clamp(requestedProgress / AUTO_OPEN_PORTION);
+    const openingProgress = Math.max(
+      interactionState.progress,
+      autoOpenProgress,
+    );
+    const finaleProgress = openedByUser
+      ? requestedProgress
+      : clamp(
+          (requestedProgress - AUTO_OPEN_PORTION) / (1 - AUTO_OPEN_PORTION),
+        );
+    let effectiveTime = settledTextTime;
+    if (openedByUser) {
+      effectiveTime = Math.max(
+        effectiveTime,
+        TEXT_SETTLED_TIME +
+          interactionState.progress *
+            (Math.min(timelineDuration, INTERACTION_REVEAL_TIME) -
+              TEXT_SETTLED_TIME),
+      );
+    }
+    if (openingProgress > 0) {
+      effectiveTime = Math.max(
+        effectiveTime,
+        TEXT_SETTLED_TIME +
+          openingProgress * (UMBRELLA_OPEN_READY_TIME - TEXT_SETTLED_TIME),
+      );
+    }
+    if (openingProgress >= 0.999) {
+      effectiveTime = Math.max(
+        effectiveTime,
+        UMBRELLA_OPEN_READY_TIME +
+          finaleProgress * (timelineDuration - UMBRELLA_OPEN_READY_TIME),
+      );
+    }
+    const controlVisible =
+      entranceProgress >= 0.9 &&
+      textIntroProgress >= OPENING_INTRO_PROGRESS &&
+      openingProgress < 0.94 &&
+      !openedByUser;
+    chapter.classList.toggle(
+      "umbrella-chapter--control-visible",
+      controlVisible,
+    );
+    chapter.classList.toggle(
+      "umbrella-chapter--opened",
+      openingProgress >= 0.999,
+    );
+    openControl.tabIndex = controlVisible ? 0 : -1;
     experienceChapter?.classList.toggle(
       "experience-chapter--umbrella-active",
       entranceProgress >= 0.98 || requestedProgress > 0,
@@ -352,6 +465,16 @@ export const createUmbrellaChapter = (
       requestedProgress = 0;
       textIntroProgress = 0;
       previousEffectiveTime = -1;
+      openedByUser = false;
+      openControl.removeEventListener("click", openFromInteraction);
+      openControl.setAttribute("aria-expanded", "false");
+      openControl.tabIndex = -1;
+      status.textContent = "";
+      chapter.classList.remove(
+        "umbrella-chapter--control-visible",
+        "umbrella-chapter--opened",
+        "umbrella-chapter--interaction-requested",
+      );
       experienceChapter?.classList.toggle(
         "experience-chapter--umbrella-active",
         false,
@@ -364,6 +487,7 @@ export const createUmbrellaChapter = (
         openUmbrella,
         canopyRain,
         rainState,
+        interactionState,
         rainCharacters,
         safeBlocks,
         shelteredChild,

@@ -109,8 +109,8 @@ export const createWaterTextReveal = ({
     })),
     ...bodyLines.map((element, index) => ({
       element,
-      start: 0.48 + index * 0.055,
-      end: 0.88 + index * 0.04,
+      start: 0.38 + index * 0.05,
+      end: 0.82 + index * 0.045,
       strength: mobile ? 0.42 : 0.56,
     })),
   ];

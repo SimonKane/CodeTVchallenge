@@ -149,9 +149,12 @@
 .experience-chapter {
   --chapter-warmth: 0;
   --chapter-cover: 1;
-  position: relative;
-  z-index: 1;
+  position: fixed;
+  z-index: 4;
+  inset: 0;
   display: grid;
+  width: 100%;
+  height: 100svh;
   min-height: 100svh;
   align-items: center;
   padding: clamp(6rem, 13vh, 10rem) var(--page-padding);
@@ -170,19 +173,23 @@
 }
 
 .experience-chapter--released {
-  margin-top: -100svh;
+  visibility: visible;
   overflow-anchor: none;
 }
 
 .experience-chapter--overlay {
-  position: fixed;
-  z-index: 4;
-  inset: 0;
-  min-height: 100svh;
-  margin: 0;
   visibility: visible;
   pointer-events: none;
   background: transparent;
+}
+
+.experience-chapter--fallback {
+  position: relative;
+  z-index: 1;
+  inset: auto;
+  height: auto;
+  visibility: visible;
+  pointer-events: none;
 }
 
 .experience-chapter--overlay::before {
@@ -1113,13 +1120,21 @@
   z-index: 4;
   top: 50%;
   left: 50%;
-  width: min(40vw, 36rem);
+  width: min(42vw, 38rem);
+  padding: clamp(1rem, 2.4vw, 2rem);
   transform: translateX(-50%);
   color: rgba(246, 245, 235, 0.82);
   text-align: center;
   text-shadow:
-    0 0 0.5rem rgba(249, 232, 184, 0.16),
-    0 0 1.8rem rgba(177, 218, 215, 0.2);
+    0 0 0.5rem rgba(249, 232, 184, 0.24),
+    0 0 1.8rem rgba(177, 218, 215, 0.28),
+    0 0.12rem 0.55rem rgba(0, 0, 0, 0.94);
+  background: radial-gradient(
+    ellipse at center,
+    rgba(1, 4, 5, 0.58),
+    rgba(1, 4, 5, 0.26) 58%,
+    transparent 76%
+  );
   pointer-events: none;
 }
 
@@ -1142,6 +1157,81 @@
   opacity: 0;
   font-size: clamp(0.83rem, 1vw, 1.02rem);
   line-height: 1.58;
+}
+
+.umbrella-chapter__open-control {
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  bottom: clamp(2.6rem, 8svh, 6rem);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 3rem;
+  padding: 0.82rem 1.2rem;
+  transform: translate(-50%, 12px);
+  border: 1px solid rgba(236, 243, 238, 0.62);
+  border-radius: 999px;
+  color: #fff9e8;
+  background: rgba(4, 9, 11, 0.76);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+    0 0.8rem 2.4rem rgba(0, 0, 0, 0.42);
+  opacity: 0;
+  font: 600 0.78rem/1 var(--font-body);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  visibility: hidden;
+  pointer-events: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.umbrella-chapter__open-control::before {
+  width: 1.2rem;
+  height: 0.7rem;
+  border-top: 2px solid currentColor;
+  border-radius: 50% 50% 0 0;
+  content: "";
+}
+
+.umbrella-chapter--control-visible .umbrella-chapter__open-control {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.umbrella-chapter--interaction-requested .umbrella-chapter__open-control {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.umbrella-chapter__open-control:hover {
+  border-color: rgba(255, 249, 232, 0.96);
+  background: rgba(18, 28, 30, 0.92);
+}
+
+.umbrella-chapter__open-control:focus-visible {
+  outline: 3px solid rgba(255, 249, 232, 0.94);
+  outline-offset: 4px;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 .umbrella-chapter__safe-copy p + p {
@@ -1181,13 +1271,13 @@
   }
 
   .umbrella-chapter__image--closed {
-    width: 112vw;
+    width: min(88vw, 42rem);
     opacity: 0.7;
   }
 
   .umbrella-chapter__image--open {
-    top: -1svh;
-    width: 146vw;
+    top: -8svh;
+    width: min(118vw, 56rem);
   }
 
   .umbrella-chapter__sheltered-child {
@@ -1224,8 +1314,9 @@
   }
 
   .umbrella-chapter__safe-copy {
-    top: 43%;
-    width: calc(100% - var(--page-padding) * 2);
+    top: 45%;
+    width: min(calc(100% - var(--page-padding) * 1.4), 35rem);
+    padding: clamp(0.9rem, 3vw, 1.45rem);
   }
 
   .umbrella-chapter__safe-copy h2 {
@@ -1233,14 +1324,42 @@
   }
 
   .umbrella-chapter__safe-copy p {
-    font-size: clamp(0.74rem, 2.8vw, 0.87rem);
-    line-height: 1.48;
+    font-size: clamp(0.86rem, 2.5vw, 1rem);
+    line-height: 1.54;
+  }
+
+  .umbrella-chapter__open-control {
+    bottom: clamp(1.6rem, 5svh, 3.2rem);
+    width: max-content;
+    max-width: calc(100% - 2rem);
+    min-height: 3.25rem;
+    font-size: 0.72rem;
   }
 }
 
 @media (max-width: 720px) {
+  .umbrella-chapter__image--open {
+    top: -8svh;
+    width: 124vw;
+  }
+
   .umbrella-chapter__sheltered-child {
-    top: 31%;
+    top: 29%;
+    left: calc(50% - min(32vw, 8.5rem));
+    width: min(68vw, 18rem);
+  }
+
+  .umbrella-chapter__safe-copy {
+    top: 43%;
+  }
+
+  .umbrella-chapter__safe-copy h2 {
+    font-size: clamp(1.8rem, 8.8vw, 2.45rem);
+  }
+
+  .umbrella-chapter__safe-copy p {
+    font-size: clamp(0.82rem, 3.45vw, 0.94rem);
+    line-height: 1.5;
   }
 }
 
@@ -1295,34 +1414,94 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .umbrella-chapter {
-    position: relative;
-    min-height: 100svh;
-    background: var(--chapter-background) center / cover no-repeat;
-  }
+.experience-chapter--fallback .umbrella-chapter {
+  position: relative;
+  min-height: 100svh;
+  background: var(--chapter-background) center / cover no-repeat;
+  pointer-events: none;
+}
 
+.experience-chapter--fallback > .experience-transition-flash,
+.experience-chapter--fallback > .experience-chapter-child,
+.experience-chapter--fallback > .editorial-final-image,
+.experience-chapter--fallback > .editorial-hidden-message,
+.experience-chapter--fallback > .editorial-lightning,
+.experience-chapter--fallback > .editorial-lightning-exposure,
+.experience-chapter--fallback > .experience-chapter-copy,
+.experience-chapter--fallback > .experience-water-canvas,
+.experience-chapter--fallback > .editorial-washed-canvas {
+  display: none;
+}
+
+.experience-chapter--fallback .umbrella-chapter__stage,
+.experience-chapter--fallback .umbrella-chapter__image--closed {
+  opacity: 1 !important;
+}
+
+.experience-chapter--fallback .umbrella-chapter__image--closed {
+  transform: translate(-50%, -50%) !important;
+  filter: brightness(1.08) contrast(1.14);
+}
+
+.experience-chapter--fallback .umbrella-chapter__problem {
+  opacity: 1;
+}
+
+.experience-chapter--fallback .umbrella-chapter__open-control {
+  pointer-events: auto;
+}
+
+.experience-chapter--fallback
+  .umbrella-chapter--opened
   .umbrella-chapter__image--closed,
+.experience-chapter--fallback
+  .umbrella-chapter--opened
   .umbrella-chapter__problem,
-  .umbrella-chapter__canopy-rain,
-  .umbrella-chapter__exposure {
-    display: none;
-  }
+.experience-chapter--fallback
+  .umbrella-chapter--opened
+  .umbrella-chapter__open-control {
+  display: none;
+}
 
-  .umbrella-chapter__stage,
+.experience-chapter--fallback
+  .umbrella-chapter--opened
   .umbrella-chapter__image--open,
-  .umbrella-chapter__shelter-glow,
+.experience-chapter--fallback
+  .umbrella-chapter--opened
   .umbrella-chapter__safe-copy h2,
+.experience-chapter--fallback
+  .umbrella-chapter--opened
   .umbrella-chapter__safe-copy p {
-    opacity: 1 !important;
-    transform: none !important;
-    clip-path: none !important;
-    filter: none !important;
-  }
+  opacity: 1 !important;
+  transform: none !important;
+  clip-path: none !important;
+  filter: none !important;
+}
 
+.experience-chapter--fallback
+  .umbrella-chapter--opened
+  .umbrella-chapter__image--open {
+  transform: translateX(-50%) !important;
+  filter: brightness(1.28) contrast(1.08) !important;
+}
+
+.experience-chapter--fallback
+  .umbrella-chapter--opened
   .umbrella-chapter__sheltered-child {
-    --sheltered-child-reveal: 1;
-    opacity: var(--sheltered-child-opacity) !important;
-    transform: none !important;
+  --sheltered-child-reveal: 1;
+  opacity: var(--sheltered-child-opacity) !important;
+  transform: none !important;
+  filter: brightness(1.14) contrast(1.08) saturate(0.94) !important;
+}
+
+.experience-chapter--fallback
+  .umbrella-chapter--opened
+  .umbrella-chapter__shelter-glow {
+  opacity: 1 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .umbrella-chapter__open-control {
+    transition: none;
   }
 }

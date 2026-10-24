@@ -225,7 +225,24 @@ const hiddenMessage = "silence";
 
     <div class="umbrella-chapter__shelter-glow" data-umbrella-glow aria-hidden="true">
     </div>
-    <div class="umbrella-chapter__safe-copy" data-umbrella-safe>
+    <button
+      class="umbrella-chapter__open-control"
+      data-umbrella-open-control
+      type="button"
+      aria-expanded="false"
+      aria-controls="umbrella-safe-copy"
+      tabindex="-1"
+    >
+      <span>Open the umbrella</span>
+    </button>
+
+    <p class="visually-hidden" data-umbrella-status aria-live="polite"></p>
+
+    <div
+      id="umbrella-safe-copy"
+      class="umbrella-chapter__safe-copy"
+      data-umbrella-safe
+    >
       <h2 id="umbrella-safe-title">Welcome to a safe place!</h2>
       <p>
         At Paraply, we understand that abuse can lead to many different feelings,

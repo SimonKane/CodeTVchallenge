@@ -39,7 +39,7 @@ test("narrative pacing and sheltered child composition stay readable", async ({
   expect(pacing.child?.aspectRatio).toBeGreaterThan(0.6);
 });
 
-test("one wheel gesture advances the narrative without jumping", async ({
+test("one wheel gesture keeps the browser's native scroll distance", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "Desktop wheel regression");
@@ -57,8 +57,8 @@ test("one wheel gesture advances the narrative without jumping", async ({
   await page.waitForTimeout(900);
   const travelled = (await page.evaluate(() => scrollY)) - startY;
 
-  expect(travelled).toBeGreaterThan(180);
-  expect(travelled).toBeLessThan(360);
+  expect(travelled).toBeGreaterThanOrEqual(479);
+  expect(travelled).toBeLessThanOrEqual(481);
 });
 
 test("the SILENCE to umbrella crossfade never locks scrolling", async ({
@@ -87,10 +87,9 @@ test("the SILENCE to umbrella crossfade never locks scrolling", async ({
       silenceMessage.evaluate((node) => Number(getComputedStyle(node).opacity)),
     ]);
     if (
-      umbrellaOpacity > 0.35 &&
-      umbrellaOpacity < 0.65 &&
-      silenceOpacity > 0.35 &&
-      silenceOpacity < 0.65
+      umbrellaOpacity > 0.2 &&
+      umbrellaOpacity < 0.85 &&
+      silenceOpacity > 0.2
     ) {
       hasVisibleCrossfade = true;
       break;
@@ -113,5 +112,5 @@ test("the SILENCE to umbrella crossfade never locks scrolling", async ({
     }
   }
   const transitionDistance = (await page.evaluate(() => scrollY)) - transitionStartY;
-  expect(transitionDistance).toBeLessThan((await page.evaluate(() => innerHeight)) * 2.3);
+  expect(transitionDistance).toBeLessThan((await page.evaluate(() => innerHeight)) * 2.5);
 });

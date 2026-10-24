@@ -33,6 +33,27 @@ test("reduced-motion fallback remains complete and lightweight", async ({ page }
     fullPage: false,
   });
 
+  const control = page.locator("[data-umbrella-open-control]");
+  await control.scrollIntoViewIfNeeded();
+  await expect(control).toBeVisible();
+  if (testInfo.project.name === "desktop") {
+    await control.focus();
+    await page.keyboard.press("Enter");
+  } else {
+    await control.tap();
+  }
+  await expect(control).toHaveAttribute("aria-expanded", "true");
+  const openUmbrella = page.locator("[data-umbrella-open]");
+  await expect(openUmbrella).toHaveCSS("opacity", "1");
+  await openUmbrella.evaluate(async (image: HTMLImageElement) => {
+    if (!image.complete) await image.decode();
+  });
+  await expect(page.locator("#umbrella-safe-title")).toHaveCSS("opacity", "1");
+  await page.screenshot({
+    path: path.join(directory, `${testInfo.project.name}-umbrella-open.png`),
+    fullPage: false,
+  });
+
   expect(consoleErrors).toEqual([]);
   expect(failedRequests).toEqual([]);
 });
