@@ -163,7 +163,7 @@ const hiddenMessage = "silence";
   aria-labelledby="umbrella-safe-title"
 >
   <div class="umbrella-chapter__stage" data-umbrella-stage>
-    <div class="umbrella-chapter__media" aria-hidden="true">
+    <div class="umbrella-chapter__media" data-umbrella-media aria-hidden="true">
       <img
         class="umbrella-chapter__image umbrella-chapter__image--closed"
         data-umbrella-closed
@@ -226,14 +226,17 @@ const hiddenMessage = "silence";
     <div class="umbrella-chapter__shelter-glow" data-umbrella-glow aria-hidden="true">
     </div>
     <button
-      class="umbrella-chapter__open-control"
-      data-umbrella-open-control
+      class="umbrella-chapter__hit-target"
+      data-umbrella-hit-target
       type="button"
+      aria-label="Open the umbrella"
       aria-expanded="false"
       aria-controls="umbrella-safe-copy"
       tabindex="-1"
     >
-      <span>Open the umbrella</span>
+      <span class="umbrella-chapter__interaction-hint" aria-hidden="true">
+        Open the umbrella
+      </span>
     </button>
 
     <p class="visually-hidden" data-umbrella-status aria-live="polite"></p>

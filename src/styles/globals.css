@@ -12,6 +12,12 @@ html {
   color: var(--color-white);
   font-family: var(--font-body);
   scroll-behavior: auto;
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 body {

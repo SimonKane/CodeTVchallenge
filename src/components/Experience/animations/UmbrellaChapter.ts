@@ -1,5 +1,6 @@
 import { gsap } from "gsap";
 import { createUmbrellaRainCanvas } from "./UmbrellaRainCanvas";
+import type { InteractionField } from "../motion/InteractionField";
 
 export interface UmbrellaChapterController {
   setEntranceProgress: (progress: number) => void;
@@ -30,12 +31,13 @@ const AUTO_OPEN_PORTION = 0.28;
 
 export const createStaticUmbrellaInteraction = (
   chapter: HTMLElement,
+  interaction: InteractionField,
 ): UmbrellaInteractionController => {
   const umbrellaChapter = chapter.matches("[data-umbrella-chapter]")
     ? chapter
     : chapter.querySelector<HTMLElement>("[data-umbrella-chapter]");
   const openControl = umbrellaChapter?.querySelector<HTMLButtonElement>(
-    "[data-umbrella-open-control]",
+    "[data-umbrella-hit-target]",
   );
   const status = umbrellaChapter?.querySelector<HTMLElement>(
     "[data-umbrella-status]",
@@ -44,6 +46,14 @@ export const createStaticUmbrellaInteraction = (
     return { destroy: () => undefined };
   }
 
+  const media = umbrellaChapter?.querySelector<HTMLElement>("[data-umbrella-media]");
+  let animationFrame: number | undefined;
+  const updateInteraction = (time: number) => {
+    const snapshot = interaction.sample(time);
+    media?.style.setProperty("--umbrella-tilt-x", `${(snapshot.pointerX - 0.5) * 5}deg`);
+    media?.style.setProperty("--umbrella-tilt-y", `${(0.5 - snapshot.pointerY) * 3}deg`);
+    animationFrame = requestAnimationFrame(updateInteraction);
+  };
   const open = () => {
     umbrellaChapter.classList.add("umbrella-chapter--opened");
     openControl.setAttribute("aria-expanded", "true");
@@ -54,10 +64,12 @@ export const createStaticUmbrellaInteraction = (
   umbrellaChapter.classList.add("umbrella-chapter--control-visible");
   openControl.tabIndex = 0;
   openControl.addEventListener("click", open);
+  animationFrame = requestAnimationFrame(updateInteraction);
 
   return {
     destroy: () => {
       openControl.removeEventListener("click", open);
+      if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
       umbrellaChapter.classList.remove(
         "umbrella-chapter--control-visible",
         "umbrella-chapter--opened",
@@ -85,13 +97,8 @@ const splitIntoRainCharacters = (element: HTMLElement) => {
         return;
       }
       const word = document.createElement("span");
-      word.className = "umbrella-rain-word";
-      [...part].forEach((character) => {
-        const letter = document.createElement("span");
-        letter.className = "umbrella-rain-character";
-        letter.textContent = character;
-        word.append(letter);
-      });
+      word.className = "umbrella-rain-word umbrella-rain-character";
+      word.textContent = part;
       fragment.append(word);
     });
     textNode.replaceWith(fragment);
@@ -131,11 +138,13 @@ const createPushVectors = (
 
 export const createUmbrellaChapter = (
   chapter: HTMLElement,
+  interaction: InteractionField,
 ): UmbrellaChapterController => {
   const experienceChapter = chapter.closest<HTMLElement>(
     "[data-experience-chapter]",
   );
   const stage = chapter.querySelector<HTMLElement>("[data-umbrella-stage]");
+  const media = chapter.querySelector<HTMLElement>("[data-umbrella-media]");
   const closedUmbrella = chapter.querySelector<HTMLElement>(
     "[data-umbrella-closed]",
   );
@@ -153,12 +162,13 @@ export const createUmbrellaChapter = (
     "[data-umbrella-exposure]",
   );
   const openControl = chapter.querySelector<HTMLButtonElement>(
-    "[data-umbrella-open-control]",
+    "[data-umbrella-hit-target]",
   );
   const status = chapter.querySelector<HTMLElement>("[data-umbrella-status]");
 
   if (
     !stage ||
+    !media ||
     !closedUmbrella ||
     !openUmbrella ||
     !canopyRain ||
@@ -196,6 +206,7 @@ export const createUmbrellaChapter = (
   let previousEffectiveTime = -1;
   let openedByUser = false;
   let renderProgress = () => undefined;
+  let interactionFrame: number | undefined;
 
   const openFromInteraction = () => {
     if (openedByUser) return;
@@ -235,13 +246,13 @@ export const createUmbrellaChapter = (
   rainCanvas.setVisibility(0);
   gsap.set(rainCharacters, {
     opacity: 0,
-    x: (index: number) => `${(hash(index * 3.71) - 0.5) * 48}px`,
-    y: (index: number) => `${-110 - hash(index * 7.13 + 2.4) * 260}px`,
-    rotation: (index: number) => (hash(index * 5.29) - 0.5) * 28,
-    scaleX: 0.18,
-    scaleY: 2.15,
-    filter: mobile ? "none" : "blur(2.2px)",
-    "--umbrella-rain-trail": 0.9,
+    x: (index: number) => `${(hash(index * 3.71) - 0.5) * 24}px`,
+    y: (index: number) => `${-28 - hash(index * 7.13 + 2.4) * 68}px`,
+    rotation: (index: number) => (hash(index * 5.29) - 0.5) * 12,
+    scaleX: 0.62,
+    scaleY: 1.38,
+    filter: mobile ? "none" : "blur(1px)",
+    "--umbrella-rain-trail": 0.45,
   });
   gsap.set(safeBlocks, { opacity: 0, y: 22 });
   gsap.set(shelteredChild, {
@@ -277,8 +288,8 @@ export const createUmbrellaChapter = (
         scaleY: 1,
         filter: "none",
         "--umbrella-rain-trail": 0,
-        duration: 0.58,
-        stagger: { amount: 1.05, from: "random" },
+        duration: 0.44,
+        stagger: { amount: 0.38, from: "random" },
         ease: "power2.out",
       },
       0.72,
@@ -376,7 +387,27 @@ export const createUmbrellaChapter = (
   // Warm all CSSPlugin property renderers before the umbrella is visible.
   timeline.progress(1, true).progress(0, true);
 
+  const applyInteractionMotion = () => {
+    const motion = interaction.sample();
+    const interactionEnergy = Math.min(
+      1,
+      Math.hypot(motion.pointerVelocityX, motion.pointerVelocityY) *
+        (motion.dragging ? 0.8 : 0.32),
+    );
+    media.style.setProperty(
+      "--umbrella-tilt-x",
+      `${(motion.pointerX - 0.5) * (motion.dragging ? 7 : 4)}deg`,
+    );
+    media.style.setProperty(
+      "--umbrella-tilt-y",
+      `${(0.5 - motion.pointerY) * (motion.dragging ? 4 : 2.5)}deg`,
+    );
+    media.style.setProperty("--umbrella-motion-energy", `${interactionEnergy}`);
+    rainCanvas.setInteraction(motion);
+  };
+
   renderProgress = () => {
+    applyInteractionMotion();
     const timelineDuration = timeline.duration();
     const textTime = textIntroProgress > 0
       ? BACKGROUND_READY_TIME +
@@ -389,6 +420,7 @@ export const createUmbrellaChapter = (
       interactionState.progress,
       autoOpenProgress,
     );
+    rainCanvas.setCollisionProgress(openingProgress);
     const finaleProgress = openedByUser
       ? requestedProgress
       : clamp(
@@ -437,6 +469,9 @@ export const createUmbrellaChapter = (
       entranceProgress >= 0.98 || requestedProgress > 0,
     );
     timeline.time(effectiveTime, false);
+    rainCanvas.setVisibility(
+      Math.max(rainState.visibility, entranceProgress * 0.24),
+    );
     const canopyIsMoving = effectiveTime >= 2.78 && effectiveTime <= 3.44;
     const crossedCanopyMotion =
       (previousEffectiveTime < 2.78 && effectiveTime > 3.44) ||
@@ -446,6 +481,14 @@ export const createUmbrellaChapter = (
     }
     previousEffectiveTime = effectiveTime;
   };
+
+  const syncLiveInteraction = () => {
+    if (entranceProgress > 0.02 || requestedProgress > 0) {
+      applyInteractionMotion();
+    }
+    interactionFrame = requestAnimationFrame(syncLiveInteraction);
+  };
+  interactionFrame = requestAnimationFrame(syncLiveInteraction);
 
   return {
     setEntranceProgress: (progress) => {
@@ -461,6 +504,7 @@ export const createUmbrellaChapter = (
       renderProgress();
     },
     destroy: () => {
+      if (interactionFrame !== undefined) cancelAnimationFrame(interactionFrame);
       entranceProgress = 0;
       requestedProgress = 0;
       textIntroProgress = 0;

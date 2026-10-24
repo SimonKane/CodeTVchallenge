@@ -20,7 +20,7 @@ test("no-WebGL fallback keeps the complete umbrella interaction", async ({
     "fallback",
   );
   await expect(page.locator("[data-experience-fallback]")).toBeVisible();
-  const control = page.locator("[data-umbrella-open-control]");
+  const control = page.locator("[data-umbrella-hit-target]");
   await control.scrollIntoViewIfNeeded();
   await expect(control).toBeVisible();
   await control.click();

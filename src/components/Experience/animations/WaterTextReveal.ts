@@ -12,8 +12,6 @@ export interface WaterTextRevealController {
 
 interface RainLetter {
   element: HTMLSpanElement;
-  delay: number;
-  distance: number;
 }
 
 interface RevealTarget {
@@ -24,6 +22,7 @@ interface RevealTarget {
   end: number;
   strength: number;
   bounds: { left: number; top: number; width: number; height: number };
+  lastProgress: number;
 }
 
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
@@ -36,14 +35,11 @@ const hash = (value: number) =>
 
 const splitIntoRainLetters = (
   element: HTMLElement,
-  strength: number,
-  mobile: boolean,
 ): { letters: RainLetter[]; originalText: string } => {
   const originalText = element.textContent?.replace(/\s+/g, " ").trim() ?? "";
   const fragment = document.createDocumentFragment();
   const letters: RainLetter[] = [];
   const parts = originalText.split(/(\s+)/);
-  let letterIndex = 0;
 
   parts.forEach((part) => {
     if (!part) return;
@@ -61,24 +57,10 @@ const splitIntoRainLetters = (
     word.setAttribute("aria-hidden", "true");
     [...part].forEach((character) => {
       const letter = document.createElement("span");
-      const delaySeed = hash(letterIndex + originalText.length * 0.37);
-      const distanceSeed = hash(letterIndex * 1.71 + originalText.length);
-      const distance = (54 + distanceSeed * 126) * strength;
       letter.className = "rain-letter";
       letter.textContent = character;
-      letter.style.opacity = "0";
-      letter.style.transform = `translate3d(0, ${-distance}px, 0) scaleX(.12) scaleY(1.9)`;
-      letter.style.filter = mobile ? "none" : "blur(1.6px)";
-      letter.style.setProperty("--rain-trail-opacity", "0");
-      letter.style.setProperty("--rain-drop-opacity", "0");
-      letter.style.setProperty("--rain-trail-height", `${distance}px`);
       word.append(letter);
-      letters.push({
-        element: letter,
-        delay: delaySeed * 0.56,
-        distance,
-      });
-      letterIndex += 1;
+      letters.push({ element: letter });
     });
     fragment.append(word);
   });
@@ -86,6 +68,9 @@ const splitIntoRainLetters = (
   element.textContent = "";
   element.append(fragment);
   element.classList.add("rain-text-reveal");
+  element.style.opacity = "0";
+  element.style.transform = "translate3d(0, -24px, 0)";
+  element.style.filter = "none";
   return { letters, originalText };
 };
 
@@ -97,7 +82,9 @@ export const createWaterTextReveal = ({
 }: WaterRevealElements): WaterTextRevealController => {
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
-  const mobile = matchMedia("(max-width: 720px)").matches;
+  const mobile = matchMedia(
+    "(max-width: 900px), (pointer: coarse)",
+  ).matches;
   let pixelRatio = Math.min(devicePixelRatio, mobile ? 1 : 2);
   const definitions = [
     { element: eyebrow, start: 0, end: 0.22, strength: 0.74 },
@@ -116,8 +103,9 @@ export const createWaterTextReveal = ({
   ];
   const targets: RevealTarget[] = definitions.map((definition) => ({
     ...definition,
-    ...splitIntoRainLetters(definition.element, definition.strength, mobile),
+    ...splitIntoRainLetters(definition.element),
     bounds: { left: 0, top: 0, width: 0, height: 0 },
+    lastProgress: -1,
   }));
   let width = 1;
   let height = 1;
@@ -163,13 +151,16 @@ export const createWaterTextReveal = ({
   resize();
 
   const drawWater = (progress: number, time = performance.now() * 0.001) => {
-    if (!context) return;
+    if (!context || mobile) return;
     context.clearRect(0, 0, width, height);
     if (progress < 0 || progress >= 0.98) return;
     const rainIn = smooth(progress / 0.1);
     const rainOut = 1 - smooth((progress - 0.82) / 0.16);
     const rainIntensity = rainIn * rainOut;
-    const screenDropCount = mobile ? 28 : 86;
+    const screenDropCount = 56;
+    const screenBuckets: Array<
+      Array<{ x: number; y: number; length: number }>
+    > = [[], [], [], []];
 
     for (let index = 0; index < screenDropCount; index += 1) {
       const xSeed = hash(index * 2.17 + 4.3);
@@ -179,24 +170,23 @@ export const createWaterTextReveal = ({
       const y = (((ySeed + time * speed) % 1.22) - 0.11) * height;
       const depth = 0.35 + hash(index * 7.31) * 0.65;
       const length = (mobile ? 18 : 24) + depth * (mobile ? 34 : 62);
+      const bucket = Math.min(3, Math.floor(depth * 4));
+      screenBuckets[bucket].push({ x, y, length });
+    }
+
+    screenBuckets.forEach((drops, bucket) => {
+      if (drops.length === 0) return;
+      const depth = (bucket + 0.5) / 4;
       const alpha = rainIntensity * (0.07 + depth * 0.2);
-      const gradient = context.createLinearGradient(x, y - length, x, y);
-      gradient.addColorStop(0, "rgba(186,214,226,0)");
-      gradient.addColorStop(
-        0.72,
-        `rgba(197,222,232,${(alpha * 0.48).toFixed(3)})`,
-      );
-      gradient.addColorStop(
-        1,
-        `rgba(233,244,247,${alpha.toFixed(3)})`,
-      );
-      context.strokeStyle = gradient;
+      context.strokeStyle = `rgba(222,239,245,${alpha.toFixed(3)})`;
       context.lineWidth = 0.55 + depth * 0.58;
       context.beginPath();
-      context.moveTo(x, y - length);
-      context.lineTo(x, y);
+      drops.forEach(({ x, y, length }) => {
+        context.moveTo(x, y - length);
+        context.lineTo(x, y);
+      });
       context.stroke();
-    }
+    });
 
     targets.forEach((target, targetIndex) => {
       const groupProgress = clamp(
@@ -206,35 +196,23 @@ export const createWaterTextReveal = ({
       const bounds = target.bounds;
       const left = bounds.left;
       const top = bounds.top;
-      const dropCount = mobile ? 3 : Math.round(7 + target.strength * 7);
+      const dropCount = Math.round(4 + target.strength * 4);
 
+      context.strokeStyle = `rgba(220,238,244,${(
+        0.28 * target.strength
+      ).toFixed(3)})`;
+      context.lineWidth = 0.78;
+      context.beginPath();
       for (let index = 0; index < dropCount; index += 1) {
         const seed = hash(index + targetIndex * 8.17);
         const x = left + bounds.width * (0.04 + seed * 0.92);
         const fall = (groupProgress * 1.55 + hash(index * 2.3) * 0.72) % 1;
         const y = top - 18 + fall * (bounds.height + 32);
         const trail = 18 + seed * 42 * target.strength;
-        const gradient = context.createLinearGradient(x, y - trail, x, y + 3);
-        gradient.addColorStop(0, "rgba(205,229,238,0)");
-        gradient.addColorStop(
-          0.76,
-          `rgba(205,229,238,${0.16 * target.strength})`,
-        );
-        gradient.addColorStop(
-          1,
-          `rgba(238,247,249,${0.48 * target.strength})`,
-        );
-        context.strokeStyle = gradient;
-        context.lineWidth = mobile ? 0.6 : 0.85;
-        context.beginPath();
         context.moveTo(x, y - trail);
         context.lineTo(x, y);
-        context.stroke();
-        context.fillStyle = `rgba(232,244,248,${0.42 * target.strength})`;
-        context.beginPath();
-        context.ellipse(x, y + 1, mobile ? 0.8 : 1.15, mobile ? 2 : 2.8, 0, 0, Math.PI * 2);
-        context.fill();
       }
+      context.stroke();
     });
   };
 
@@ -242,47 +220,21 @@ export const createWaterTextReveal = ({
     const groupProgress = clamp(
       (progress - target.start) / (target.end - target.start),
     );
-    target.letters.forEach(({ element, delay, distance }) => {
-      const cinematicDelay = delay * (0.35 / 0.56);
-      const letterProgress = clamp((groupProgress - cinematicDelay) / 0.65);
-      const settled = smooth(letterProgress);
-      const visibility = smooth(letterProgress / 0.13);
-      const glyphShape = smooth((letterProgress - 0.16) / 0.68);
-      const trailOpacity =
-        Math.sin(Math.PI * letterProgress) *
-        (0.32 + target.strength * 0.48);
-      const dropOpacity =
-        (1 - smooth((letterProgress - 0.42) / 0.38)) *
-        Math.min(1, visibility * 1.4);
-      const transform = `translate3d(0, ${(
-        -distance *
-        (1 - settled)
-      ).toFixed(2)}px, 0) scaleX(${(0.12 + glyphShape * 0.88).toFixed(
-        3,
-      )}) scaleY(${(1.9 - glyphShape * 0.9).toFixed(3)})`;
-      const filter =
-        mobile || letterProgress >= 0.88
-          ? "none"
-          : `blur(${((1 - glyphShape) * 1.35).toFixed(2)}px)`;
-      const textShadow =
-        mobile || letterProgress >= 0.92
-          ? "none"
-          : `0 0 ${(2 + (1 - glyphShape) * 7).toFixed(
-              1,
-            )}px rgba(205,231,240,${(0.12 + dropOpacity * 0.34).toFixed(2)})`;
-      if (!mobile) {
-        element.style.cssText =
-          `opacity:${visibility};transform:${transform};filter:${filter};` +
-          `text-shadow:${textShadow};--rain-trail-opacity:${trailOpacity.toFixed(3)};` +
-          `--rain-drop-opacity:${dropOpacity.toFixed(3)};` +
-          `--rain-trail-height:${Math.max(5, distance * (1 - settled * 0.72)).toFixed(1)}px`;
-      } else {
-        element.style.cssText =
-          `opacity:${visibility};transform:${transform};filter:${filter};` +
-          `text-shadow:${textShadow};--rain-trail-opacity:0;--rain-drop-opacity:0;` +
-          `--rain-trail-height:${distance}px`;
-      }
-    });
+    if (
+      groupProgress === target.lastProgress ||
+      (groupProgress > 0 &&
+        groupProgress < 1 &&
+        Math.abs(groupProgress - target.lastProgress) < 0.003)
+    ) {
+      return;
+    }
+    target.lastProgress = groupProgress;
+    const settled = smooth(groupProgress);
+    target.element.style.opacity = `${smooth(groupProgress / 0.22)}`;
+    target.element.style.transform = `translate3d(0, ${(
+      -24 *
+      (1 - settled)
+    ).toFixed(2)}px, 0)`;
     target.element.classList.toggle(
       "rain-text-reveal--complete",
       groupProgress >= 0.999,
@@ -304,6 +256,9 @@ export const createWaterTextReveal = ({
           "rain-text-reveal--complete",
         );
         element.textContent = originalText;
+        element.style.removeProperty("opacity");
+        element.style.removeProperty("transform");
+        element.style.removeProperty("filter");
       });
       canvas.remove();
     },

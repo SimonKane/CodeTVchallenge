@@ -4,6 +4,7 @@ import type { ExperienceScene } from "../webgl/ExperienceScene";
 import { createEditorialTransformation } from "./EditorialTransformation";
 import { createUmbrellaChapter } from "./UmbrellaChapter";
 import { createWaterTextReveal } from "./WaterTextReveal";
+import type { InteractionField } from "../motion/InteractionField";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -51,6 +52,7 @@ export interface NarrativeController {
 export const createNarrativeTimeline = (
   elements: NarrativeElements,
   scene: ExperienceScene,
+  interaction: InteractionField,
 ): NarrativeController => {
   const {
     root,
@@ -82,12 +84,16 @@ export const createNarrativeTimeline = (
   let progressBeforeRefresh: number | undefined;
   let scenePausedForEditorial = false;
   let chapterState: "held" | "overlay" | "released" | undefined;
+  const mobileScroll = matchMedia(
+    "(max-width: 800px), (pointer: coarse)",
+  ).matches;
   const waterReveal = createWaterTextReveal({
     container: chapter,
     eyebrow: chapterEyebrow,
     headingLines: chapterLines,
     bodyLines: chapterBodyLines,
   });
+  waterReveal.setProgress(0);
   const editorialTransformation = createEditorialTransformation({
     chapter,
     copy: chapterCopy,
@@ -97,7 +103,7 @@ export const createNarrativeTimeline = (
     "[data-umbrella-chapter]",
   );
   const umbrellaTransformation = umbrellaChapter
-    ? createUmbrellaChapter(umbrellaChapter)
+    ? createUmbrellaChapter(umbrellaChapter, interaction)
     : {
         setEntranceProgress: () => undefined,
         setProgress: () => undefined,
@@ -165,9 +171,12 @@ export const createNarrativeTimeline = (
         end: () => `+=${innerHeight * getNarrativeScrollDistance()}`,
         pin: true,
         pinSpacing: true,
-        scrub: true,
+        scrub: mobileScroll ? 0.58 : 0.72,
         anticipatePin: 1,
         invalidateOnRefresh: true,
+        onUpdate: (trigger) => {
+          interaction.updateScroll(trigger.scroll(), performance.now());
+        },
         onLeave: () => {
           syncChapterState(1, true);
           if (!scenePausedForEditorial) {
@@ -503,6 +512,8 @@ export const createNarrativeTimeline = (
         );
     }
 
+    // Allocate CSS/compositor state before the first fast scroll crosses a chapter.
+    scrollTimeline.progress(1, true).progress(0, true);
     requestRefresh();
   };
 

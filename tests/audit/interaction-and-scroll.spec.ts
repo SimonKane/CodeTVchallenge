@@ -16,7 +16,7 @@ const maxScroll = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
 
 const seekToUmbrellaControl = async (page: Page) => {
-  const control = page.locator("[data-umbrella-open-control]");
+  const control = page.locator("[data-umbrella-hit-target]");
   for (let progress = 0.76; progress <= 0.94; progress += 0.01) {
     await page.evaluate((ratio) => {
       const maximum = document.documentElement.scrollHeight - innerHeight;
@@ -156,6 +156,21 @@ test("Space activates the umbrella control", async ({ page }, testInfo) => {
   await control.focus();
   await page.keyboard.press("Space");
   await expect(control).toHaveAttribute("aria-expanded", "true");
+});
+
+test("pointer drag feeds the shared rain interaction field", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "Pointer-field regression uses desktop");
+  await ready(page);
+  const canvas = page.locator("[data-experience-canvas]");
+  await page.mouse.move(240, 300);
+  await page.mouse.down();
+  await page.mouse.move(1180, 620, { steps: 5 });
+  await expect
+    .poll(async () => Number((await canvas.getAttribute("data-motion-energy")) ?? 0))
+    .toBeGreaterThan(0.04);
+  await page.mouse.up();
 });
 
 test("native touch swipe advances the mobile narrative", async ({

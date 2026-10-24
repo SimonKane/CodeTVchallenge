@@ -2,6 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 const externalBaseUrl = process.env.PARAPLY_TEST_BASE_URL;
 const baseURL = externalBaseUrl ?? "http://127.0.0.1:4321";
+const browserChannel = process.env.PARAPLY_BROWSER_CHANNEL;
+const headful = process.env.PARAPLY_HEADFUL === "1";
 
 export default defineConfig({
   testDir: "./tests/audit",
@@ -12,7 +14,10 @@ export default defineConfig({
   reporter: "line",
   use: {
     baseURL,
-    channel: "chrome",
+    ...(browserChannel === "chromium"
+      ? {}
+      : { channel: browserChannel ?? "chrome" }),
+    headless: !headful,
     launchOptions: {
       args: ["--disable-crash-reporter", "--disable-features=Crashpad"],
     },

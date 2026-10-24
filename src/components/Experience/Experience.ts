@@ -4,19 +4,24 @@ import {
   createStaticUmbrellaInteraction,
   type UmbrellaInteractionController,
 } from "./animations/UmbrellaChapter";
+import { InteractionField } from "./motion/InteractionField";
 import { ExperienceScene } from "./webgl/ExperienceScene";
 import { getQualityPreset, supportsWebGL } from "./webgl/QualityManager";
 
 interface ExperienceInstance {
   scene: ExperienceScene;
   narrative: NarrativeController;
+  interaction: InteractionField;
   resizeObserver: ResizeObserver;
   handleVisibility: () => void;
   decodeTimer?: number;
 }
 
 const instances = new Map<HTMLElement, ExperienceInstance>();
-const fallbackInteractions = new Map<HTMLElement, UmbrellaInteractionController>();
+const fallbackInteractions = new Map<
+  HTMLElement,
+  { controller: UmbrellaInteractionController; interaction: InteractionField }
+>();
 const initializing = new WeakSet<HTMLElement>();
 
 const resetScrollOnReload = () => {
@@ -62,7 +67,11 @@ const activateFallback = (root: HTMLElement, staticMode = false) => {
   root.hidden = true;
   chapter?.classList.add("experience-chapter--fallback");
   if (chapter && !fallbackInteractions.has(root)) {
-    fallbackInteractions.set(root, createStaticUmbrellaInteraction(chapter));
+    const interaction = new InteractionField(chapter);
+    fallbackInteractions.set(root, {
+      controller: createStaticUmbrellaInteraction(chapter, interaction),
+      interaction,
+    });
   }
   if (!fallback) return;
   fallback.hidden = false;
@@ -72,11 +81,13 @@ const activateFallback = (root: HTMLElement, staticMode = false) => {
 };
 
 const destroyExperience = (root: HTMLElement) => {
-  fallbackInteractions.get(root)?.destroy();
+  fallbackInteractions.get(root)?.controller.destroy();
+  fallbackInteractions.get(root)?.interaction.destroy();
   fallbackInteractions.delete(root);
   const instance = instances.get(root);
   if (!instance) return;
   instance.narrative.destroy();
+  instance.interaction.destroy();
   instance.resizeObserver.disconnect();
   document.removeEventListener("visibilitychange", instance.handleVisibility);
   if (instance.decodeTimer !== undefined) clearTimeout(instance.decodeTimer);
@@ -134,6 +145,8 @@ const initializeExperience = async (root: HTMLElement) => {
   }
 
   initializing.add(root);
+  let pendingScene: ExperienceScene | undefined;
+  let pendingInteraction: InteractionField | undefined;
   try {
     const scene = new ExperienceScene({
       canvas,
@@ -143,11 +156,22 @@ const initializeExperience = async (root: HTMLElement) => {
       childLookbackUrl: canvas.dataset.childLookbackSrc ?? "",
       quality: getQualityPreset(),
     });
+    pendingScene = scene;
     await scene.init();
     if (!document.contains(root)) {
       scene.dispose();
       return;
     }
+    await Promise.all(
+      [
+        ...chapter.querySelectorAll<HTMLImageElement>(
+          "[data-chapter-child] img, [data-editorial-final-image] img",
+        ),
+      ].map((image) => image.decode().catch(() => undefined)),
+    );
+    const interaction = new InteractionField(root);
+    pendingInteraction = interaction;
+    scene.setInteractionField(interaction);
     const narrative = createNarrativeTimeline(
       {
         root,
@@ -165,6 +189,7 @@ const initializeExperience = async (root: HTMLElement) => {
         chapterChild,
       },
       scene,
+      interaction,
     );
     const resizeObserver = new ResizeObserver(() => {
       scene.resize();
@@ -183,13 +208,18 @@ const initializeExperience = async (root: HTMLElement) => {
     instances.set(root, {
       scene,
       narrative,
+      interaction,
       resizeObserver,
       handleVisibility,
       decodeTimer,
     });
+    pendingScene = undefined;
+    pendingInteraction = undefined;
     root.dataset.sceneStatus = "ready";
     scene.start();
   } catch (error) {
+    pendingInteraction?.destroy();
+    pendingScene?.dispose();
     console.warn("WebGL experience unavailable; showing static scene.", error);
     activateFallback(root);
   } finally {

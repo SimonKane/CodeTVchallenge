@@ -30,6 +30,7 @@ import { LightningSystem } from "./LightningSystem";
 import { PostProcessing } from "./PostProcessing";
 import { RainSystem } from "./RainSystem";
 import { WetRoad } from "./WetRoad";
+import type { InteractionField } from "../motion/InteractionField";
 
 interface SceneOptions {
   canvas: HTMLCanvasElement;
@@ -233,6 +234,7 @@ export class ExperienceScene {
   private shadowTexture?: Texture;
   private sceneGroup = new Group();
   private animationFrame?: number;
+  private interactionField?: InteractionField;
   private running = false;
   private progress = 0;
   private environmentVisibility = 0;
@@ -245,12 +247,6 @@ export class ExperienceScene {
   private debugGroup?: Group;
   private debugOverlay?: HTMLDivElement;
   private debugEnabled = false;
-  private readonly handlePointer = (event: PointerEvent) => {
-    this.pointerTarget.set(
-      (event.clientX / innerWidth) * 2 - 1,
-      -(event.clientY / innerHeight) * 2 + 1,
-    );
-  };
   private readonly handleDebug = (event: KeyboardEvent) => {
     if (event.key.toLowerCase() !== "d") return;
     this.debugEnabled = !this.debugEnabled;
@@ -290,7 +286,6 @@ export class ExperienceScene {
     this.resize();
     await this.warmRenderer();
     if (!this.quality.mobile && matchMedia("(pointer: fine)").matches) {
-      addEventListener("pointermove", this.handlePointer, { passive: true });
     }
     if (import.meta.env.DEV) this.createDebugTools();
   }
@@ -600,6 +595,10 @@ export class ExperienceScene {
     this.rain?.setVisibility(value);
   }
 
+  setInteractionField(interaction: InteractionField) {
+    this.interactionField = interaction;
+  }
+
   setEnvironmentVisibility(value: number) {
     this.environmentVisibility = value;
     if (this.environment)
@@ -764,9 +763,43 @@ export class ExperienceScene {
       const delta = Math.min(0.04, frameDuration);
       this.previousTime = seconds;
       this.elapsed += delta;
+      const interaction = this.interactionField?.sample(time);
+      if (interaction) {
+        this.pointerTarget.set(
+          (interaction.pointerX - 0.5) * 2,
+          -(interaction.pointerY - 0.5) * 2,
+        );
+        const motionEnergy = Math.min(
+          1,
+          Math.abs(interaction.scrollVelocity) +
+            Math.hypot(
+              interaction.pointerVelocityX,
+              interaction.pointerVelocityY,
+            ) * (interaction.dragging ? 0.42 : 0.18),
+        );
+        this.canvas.dataset.motionEnergy = motionEnergy.toFixed(3);
+      }
       this.pointer.lerp(this.pointerTarget, 0.045);
       this.updateChildParallax();
-      this.rain?.setPointer(this.pointer);
+      if (interaction) {
+        const interactionStrength = Math.min(
+          1,
+          Math.hypot(
+            interaction.pointerVelocityX,
+            interaction.pointerVelocityY,
+          ) * (interaction.dragging ? 0.72 : 0.3),
+        );
+        this.rain?.setInteraction(
+          this.pointer,
+          interaction.pointerVelocityX,
+          -interaction.pointerVelocityY,
+          interactionStrength,
+          interaction.scrollVelocity,
+        );
+        this.camera.rotation.z = -interaction.scrollVelocity * 0.008;
+      } else {
+        this.rain?.setPointer(this.pointer);
+      }
       this.fog?.setPointer(this.pointer);
       this.rain?.update(delta, this.elapsed, this.camera.position.z);
       const bounds = this.debugGroup?.getObjectByName("rain-bounds");
@@ -793,7 +826,6 @@ export class ExperienceScene {
 
   dispose() {
     this.pause();
-    removeEventListener("pointermove", this.handlePointer);
     removeEventListener("keydown", this.handleDebug);
     this.debugOverlay?.remove();
     this.rain?.dispose();

@@ -33,7 +33,7 @@ test("reduced-motion fallback remains complete and lightweight", async ({ page }
     fullPage: false,
   });
 
-  const control = page.locator("[data-umbrella-open-control]");
+  const control = page.locator("[data-umbrella-hit-target]");
   await control.scrollIntoViewIfNeeded();
   await expect(control).toBeVisible();
   if (testInfo.project.name === "desktop") {

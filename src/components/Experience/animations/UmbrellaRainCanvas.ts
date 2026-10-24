@@ -1,3 +1,5 @@
+import type { InteractionSnapshot } from "../motion/InteractionField";
+
 interface RainDrop {
   x: number;
   y: number;
@@ -38,6 +40,8 @@ interface RunoffDrop {
 
 export interface UmbrellaRainCanvasController {
   setVisibility: (visibility: number) => void;
+  setInteraction: (snapshot: InteractionSnapshot) => void;
+  setCollisionProgress: (progress: number) => void;
   invalidateGeometry: () => void;
   destroy: () => void;
 }
@@ -67,6 +71,13 @@ export const createUmbrellaRainCanvas = (
   let animationFrame: number | undefined;
   let previousTime = performance.now();
   let geometryDirty = true;
+  let pointerX = width * 0.5;
+  let pointerY = height * 0.5;
+  let pointerVelocityX = 0;
+  let pointerVelocityY = 0;
+  let pointerForce = 0;
+  let dragging = false;
+  let collisionProgress = 0;
 
   const canopy = {
     centerX: width * 0.5,
@@ -186,17 +197,27 @@ export const createUmbrellaRainCanvas = (
     if (geometryDirty) syncCanopyGeometry();
     rain.forEach((drop) => {
       const previousY = drop.y;
+      const pointerDx = drop.x - pointerX;
+      const pointerDy = drop.y - pointerY;
+      const pointerRadius = Math.min(width, height) * (dragging ? 0.34 : 0.22);
+      const pointerDistance = Math.hypot(pointerDx, pointerDy);
+      if (pointerDistance < pointerRadius && pointerForce > 0.01) {
+        const influence = (1 - pointerDistance / pointerRadius) * pointerForce;
+        drop.x += pointerVelocityX * influence * delta * width * 0.18;
+        drop.y += pointerVelocityY * influence * delta * height * 0.08;
+      }
       drop.x += drop.drift * delta;
       drop.y += drop.speed * delta;
       const surface = canopySurface(drop.x);
       if (surface !== undefined && previousY > surface) {
         resetRainDrop(drop);
       } else if (
+        collisionProgress > 0.05 &&
         surface !== undefined &&
         previousY <= surface &&
         drop.y >= surface
       ) {
-        createImpact(drop.x, surface);
+        if (Math.random() < collisionProgress) createImpact(drop.x, surface);
         resetRainDrop(drop);
       } else if (drop.y - drop.length > height || drop.x < -100) {
         resetRainDrop(drop);
@@ -214,6 +235,7 @@ export const createUmbrellaRainCanvas = (
         splashes.splice(index, 1);
       }
     }
+    pointerForce *= Math.exp(-delta * (dragging ? 2.2 : 6.5));
 
     for (let index = impactCrowns.length - 1; index >= 0; index -= 1) {
       impactCrowns[index].life -= delta;
@@ -250,15 +272,22 @@ export const createUmbrellaRainCanvas = (
     context.clearRect(0, 0, width, height);
     context.save();
     context.lineCap = "round";
-    rain.forEach((drop) => {
-      context.globalAlpha = drop.alpha;
+    context.lineWidth = 0.65;
+    for (let bucket = 0; bucket < 4; bucket += 1) {
+      context.globalAlpha = 0.28 + bucket * 0.16;
       context.strokeStyle = "rgba(205,231,241,.9)";
-      context.lineWidth = 0.65;
       context.beginPath();
-      context.moveTo(drop.x - drop.drift * 0.018, drop.y - drop.length);
-      context.lineTo(drop.x, drop.y);
+      rain.forEach((drop) => {
+        if (Math.min(3, Math.floor(drop.alpha * 4)) !== bucket) return;
+        const flow = pointerVelocityX * pointerForce * 5;
+        context.moveTo(
+          drop.x - drop.drift * 0.018 - flow,
+          drop.y - drop.length,
+        );
+        context.lineTo(drop.x, drop.y);
+      });
       context.stroke();
-    });
+    }
     splashes.forEach((drop) => {
       context.globalAlpha = (drop.life / drop.maxLife) * 0.9;
       context.strokeStyle = "rgba(229,245,249,.95)";
@@ -325,6 +354,24 @@ export const createUmbrellaRainCanvas = (
       visibility = clamp(value);
       canvas.style.opacity = `${visibility}`;
       syncAnimation();
+    },
+    setInteraction: (snapshot) => {
+      pointerX = snapshot.pointerX * width;
+      pointerY = snapshot.pointerY * height;
+      pointerVelocityX = snapshot.pointerVelocityX;
+      pointerVelocityY = snapshot.pointerVelocityY;
+      dragging = snapshot.dragging;
+      pointerForce = Math.max(
+        pointerForce,
+        Math.min(
+          1,
+          Math.hypot(pointerVelocityX, pointerVelocityY) *
+            (dragging ? 0.9 : 0.42),
+        ),
+      );
+    },
+    setCollisionProgress: (progress) => {
+      collisionProgress = clamp(progress);
     },
     invalidateGeometry: () => {
       geometryDirty = true;

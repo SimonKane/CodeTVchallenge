@@ -23,6 +23,8 @@ const vertexShader = `
   varying float vStretch;
   varying float vPointSize;
   uniform vec2 uPointer;
+  uniform vec2 uFlow;
+  uniform float uInteraction;
   uniform float uLightning;
   uniform float uIntensity;
   uniform float uWarmth;
@@ -33,7 +35,9 @@ const vertexShader = `
   void main() {
     vec3 p=position;
     float pointerDistance=distance(p.xy*.22,uPointer);
-    p.x+=(p.x*.22-uPointer.x)*smoothstep(.75,0.,pointerDistance)*.11;
+    float interaction=smoothstep(.95,0.,pointerDistance)*uInteraction;
+    p.x+=(p.x*.22-uPointer.x)*interaction*.2+uFlow.x*interaction*.12;
+    p.y+=uFlow.y*interaction*.045;
     vec4 mv=modelViewMatrix*vec4(p,1.);
     gl_Position=projectionMatrix*mv;
 
@@ -43,7 +47,7 @@ const vertexShader = `
     gl_PointSize=pointSize;
     vPointSize=pointSize;
 
-    vFlow=normalize(vec2(.09+nearFactor*.035,-1.));
+    vFlow=normalize(vec2(.09+nearFactor*.035+uFlow.x*.24,-1.+uFlow.y*.06));
     vStretch=clamp(.56+aLayer*.17+nearFactor*(.22+uTravel*.2),.52,.98);
     vAlpha=aAlpha*uIntensity*(.82+nearFactor*.56+uLightning*1.65+uRush*.22);
     float faceMask=smoothstep(1.18,.18,distance(p.xy,vec2(uWarmCenter,.62)));
@@ -88,6 +92,8 @@ export class RainSystem {
   private rush = 0;
   private intensity = 0.82;
   private visibility = 1;
+  private flowX = 0;
+  private scrollFlow = 0;
   private activeCount: number;
 
   constructor(count: number, warmCenter: number) {
@@ -118,6 +124,8 @@ export class RainSystem {
     this.material = new ShaderMaterial({
       uniforms: {
         uPointer: { value: new Vector2(20, 20) },
+        uFlow: { value: new Vector2() },
+        uInteraction: { value: 0 },
         uLightning: { value: 0 },
         uIntensity: { value: 0.82 },
         uWarmth: { value: 0 },
@@ -168,6 +176,20 @@ export class RainSystem {
     this.material.uniforms.uPointer.value.copy(pointer);
   }
 
+  setInteraction(
+    pointer: Vector2,
+    velocityX: number,
+    velocityY: number,
+    strength: number,
+    scrollVelocity: number,
+  ) {
+    this.material.uniforms.uPointer.value.copy(pointer);
+    this.material.uniforms.uFlow.value.set(velocityX, velocityY);
+    this.material.uniforms.uInteraction.value = strength;
+    this.flowX = velocityX;
+    this.scrollFlow = scrollVelocity;
+  }
+
   setDensity(ratio: number) {
     this.activeCount = Math.max(
       400,
@@ -180,7 +202,11 @@ export class RainSystem {
     const cameraDelta = this.cameraZ - cameraZ;
     this.cameraZ = cameraZ;
     const travel = 1 - this.range(0.26, 0.38, this.progress);
-    const wind = Math.sin(elapsed * 0.34) * 0.22 + 0.3;
+    const wind =
+      Math.sin(elapsed * 0.34) * 0.22 +
+      0.3 +
+      this.flowX * 0.42 +
+      this.scrollFlow * 0.34;
 
     for (let i = 0; i < this.activeCount; i += 1) {
       const offset = i * 3;
